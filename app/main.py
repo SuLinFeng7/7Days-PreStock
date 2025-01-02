@@ -6,12 +6,15 @@ import pandas as pd
 from data.data_preprocessing import get_stock_data
 from models.model_trainer import ModelTrainer
 from utils.visualization import create_prediction_chart, create_metrics_table
+from utils.record_keeper import RecordKeeper
+import numpy as np
 
 class StockPredictionApp:
     def __init__(self, root):
         self.root = root
         self.root.title("股票预测系统")
         self.root.geometry("600x400")
+        self.record_keeper = RecordKeeper()  # 添加记录器
         
         # 创建界面元素
         self.create_widgets()
@@ -74,11 +77,14 @@ class StockPredictionApp:
         start_date = self.start_date.get_date()
         end_date = self.end_date.get_date()
         
-        # 获取历史数据
+        self.update_status(f"开始获取股票 {stock_code} 的历史数据...")
+        
         try:
             # 修改训练数据的时间范围
             train_end = datetime.now().date()
-            train_start = train_end - timedelta(days=365*3)  # 获取3年的历史数据
+            train_start = train_end - timedelta(days=365*3)
+            
+            self.update_status(f"正在获取从 {train_start} 到 {train_end} 的历史数据...")
             
             # 格式化日期为YYYY-MM-DD格式
             train_start_str = train_start.strftime('%Y-%m-%d')
@@ -87,21 +93,24 @@ class StockPredictionApp:
             df = get_stock_data(stock_code, train_start_str, train_end_str)
             
             if df.empty:
-                messagebox.showerror("错误", "无法获取股票数据，请检查股票代码是否正确")
+                self.update_status("错误：无法获取股票数据，请检查股票代码是否正确")
                 return
             
-        except Exception as e:
-            messagebox.showerror("错误", f"获取股票数据失败: {str(e)}")
-            return
+            self.update_status("数据获取成功，开始训练模型...")
             
-        # 训练模型
-        trainer = ModelTrainer(df, self.progress)
-        predictions, metrics = trainer.train_all_models()
+            # 训练模型
+            trainer = ModelTrainer(df, self.progress)
+            predictions, metrics = trainer.train_all_models()
+            
+            self.update_status("模型训练完成，正在生成预测结果...")
+            
+            # 显示结果
+            self.show_results(predictions, metrics, start_date, end_date, train_start, train_end)
+            
+        except Exception as e:
+            self.update_status(f"错误：{str(e)}")
         
-        # 显示结果
-        self.show_results(predictions, metrics, start_date, end_date)
-        
-    def show_results(self, predictions, metrics, start_date, end_date):
+    def show_results(self, predictions, metrics, start_date, end_date, train_start, train_end):
         # 创建新窗口显示结果
         result_window = tk.Toplevel(self.root)
         result_window.title("预测结果")
@@ -129,14 +138,52 @@ class StockPredictionApp:
         
         # 显示最佳预测结果
         best_model = min(metrics.items(), key=lambda x: x[1]['MAPE'])[0]
-        best_prediction = predictions[best_model]
+        best_prediction = predictions[best_model][0] if isinstance(predictions[best_model], (list, np.ndarray)) else predictions[best_model]
         
         result_label = tk.Label(
             main_frame, 
-            text=f"Best Prediction ({best_model} Model): ${best_prediction:.2f}",
+            text=f"Best Prediction ({best_model} Model): {best_prediction:.2f}",
             font=('Arial', 12, 'bold')
         )
         result_label.pack(pady=(0, 10))
+        
+        # 添加状态更新
+        self.update_status("正在保存预测记录...")
+        
+        # 生成预测日期列表
+        pred_dates = pd.date_range(start=start_date, end=end_date)
+        
+        # 为每个模型保存记录
+        for model_name, pred_values in predictions.items():
+            # 确保pred_values是列表形式
+            if not isinstance(pred_values, (list, np.ndarray)):
+                pred_values = [pred_values]
+            
+            try:
+                self.record_keeper.add_record(
+                    stock_code=self.stock_id.get(),
+                    predictions=pred_values,
+                    metrics=metrics[model_name],
+                    pred_dates=pred_dates,
+                    model_name=model_name,
+                    train_start_date=train_start,
+                    train_end_date=train_end
+                )
+                self.update_status(f"{model_name} 模型预测记录保存成功")
+            except Exception as e:
+                self.update_status(f"保存 {model_name} 模型记录时发生错误: {str(e)}")
+
+    def update_status(self, message, clear=False):
+        """更新状态信息到文本区域"""
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        formatted_message = f"[{timestamp}] {message}\n"
+        
+        if clear:
+            self.result_text.delete(1.0, tk.END)
+        
+        self.result_text.insert(tk.END, formatted_message)
+        self.result_text.see(tk.END)
+        self.root.update()
 
 if __name__ == "__main__":
     root = tk.Tk()

@@ -7,20 +7,20 @@ TRAIN_YEARS = 3  # 训练数据年限
 
 # 模型训练参数
 LSTM_PARAMS = {
-    'hidden_dim': 64,
-    'num_layers': 3,
-    'epochs': 50,
-    'batch_size': 32,
-    'learning_rate': 0.001
+    'hidden_dim': 64, # 隐藏层维度
+    'num_layers': 3, # 层数
+    'epochs': 50, # 训练轮数
+    'batch_size': 32, # 批量大小
+    'learning_rate': 0.001 # 学习率
 }
 
 CNN_PARAMS = {
-    'epochs': 200,
-    'batch_size': 32,
-    'early_stopping_patience': 30,
-    'reduce_lr_patience': 10,
-    'reduce_lr_factor': 0.5,
-    'min_lr': 1e-6
+    'epochs': 200, # 训练轮数
+    'batch_size': 32, # 批量大小
+    'early_stopping_patience': 30, # 早停步数
+    'reduce_lr_patience': 10, # 学习率减少步数
+    'reduce_lr_factor': 0.5, # 学习率减少因子
+    'min_lr': 1e-6 # 最小学习率
 }
 
 TRANSFORMER_PARAMS = {
