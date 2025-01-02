@@ -25,6 +25,23 @@ class StockPredictionApp:
         self.stock_id = tk.Entry(self.root)
         self.stock_id.pack(pady=5)
         
+        # 训练数据年限选择
+        year_frame = tk.Frame(self.root)
+        year_frame.pack(pady=5)
+        
+        tk.Label(year_frame, text="训练数据年限:").pack(side=tk.LEFT)
+        self.year_var = tk.StringVar(value="3")  # 默认3年
+        year_choices = [str(i) for i in range(1, 11)]  # 1到10年
+        year_menu = ttk.Combobox(
+            year_frame, 
+            textvariable=self.year_var,
+            values=year_choices,
+            width=5,
+            state="readonly"
+        )
+        year_menu.pack(side=tk.LEFT, padx=5)
+        tk.Label(year_frame, text="年").pack(side=tk.LEFT)
+        
         # 日期选择
         date_frame = tk.Frame(self.root)
         date_frame.pack(pady=10)
@@ -63,6 +80,10 @@ class StockPredictionApp:
             messagebox.showerror("错误", "结束日期必须大于开始日期")
             return False
             
+        if start == end:
+            messagebox.showerror("错误", "开始日期和结束日期不能是同一天")
+            return False
+            
         if (end - start).days > 7:
             messagebox.showerror("错误", "预测期间不能超过7天")
             return False
@@ -77,14 +98,16 @@ class StockPredictionApp:
         start_date = self.start_date.get_date()
         end_date = self.end_date.get_date()
         
+        # 获取选择的训练年限
+        train_years = int(self.year_var.get())
         self.update_status(f"开始获取股票 {stock_code} 的历史数据...")
         
         try:
             # 修改训练数据的时间范围
             train_end = datetime.now().date()
-            train_start = train_end - timedelta(days=365*3)
+            train_start = train_end - timedelta(days=365*train_years)
             
-            self.update_status(f"正在获取从 {train_start} 到 {train_end} 的历史数据...")
+            self.update_status(f"正在获取从 {train_start} 到 {train_end} 的历史数据（{train_years}年）...")
             
             # 格式化日期为YYYY-MM-DD格式
             train_start_str = train_start.strftime('%Y-%m-%d')
@@ -98,19 +121,26 @@ class StockPredictionApp:
             
             self.update_status("数据获取成功，开始训练模型...")
             
+            # 记录训练开始时间
+            train_start_time = datetime.now()
+            
             # 训练模型
             trainer = ModelTrainer(df, self.progress)
             predictions, metrics = trainer.train_all_models()
             
+            # 记录训练结束时间
+            train_end_time = datetime.now()
+            train_duration = (train_end_time - train_start_time).total_seconds() / 60  # 转换为分钟
+            
             self.update_status("模型训练完成，正在生成预测结果...")
             
             # 显示结果
-            self.show_results(predictions, metrics, start_date, end_date, train_start, train_end)
+            self.show_results(predictions, metrics, start_date, end_date, train_start, train_end, train_duration)
             
         except Exception as e:
             self.update_status(f"错误：{str(e)}")
         
-    def show_results(self, predictions, metrics, start_date, end_date, train_start, train_end):
+    def show_results(self, predictions, metrics, start_date, end_date, train_start, train_end, train_duration):
         # 创建新窗口显示结果
         result_window = tk.Toplevel(self.root)
         result_window.title("预测结果")
@@ -133,8 +163,8 @@ class StockPredictionApp:
         metrics_frame.pack(pady=(0, 20), fill=tk.X)
         
         # 添加图表
-        chart = create_prediction_chart(predictions, start_date, end_date, main_frame)
-        chart.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
+        chart_widget = create_prediction_chart(predictions, start_date, end_date, main_frame)
+        chart_widget.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
         
         # 显示最佳预测结果
         best_model = min(metrics.items(), key=lambda x: x[1]['MAPE'])[0]
@@ -167,7 +197,8 @@ class StockPredictionApp:
                     pred_dates=pred_dates,
                     model_name=model_name,
                     train_start_date=train_start,
-                    train_end_date=train_end
+                    train_end_date=train_end,
+                    train_duration=train_duration  # 传递训练时长
                 )
                 self.update_status(f"{model_name} 模型预测记录保存成功")
             except Exception as e:

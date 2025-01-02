@@ -6,34 +6,24 @@ from datetime import timedelta
 import pandas as pd
 import numpy as np
 
-def create_prediction_chart(predictions, start_date, end_date, master):
-    # 创建日期范围
-    date_range = pd.date_range(start=start_date, end=end_date)
-    num_days = len(date_range)
+def create_prediction_chart(predictions, start_date, end_date, parent_frame):
+    # 生成预测日期列表
+    pred_dates = pd.date_range(start=start_date, end=end_date)
     
-    # 创建图形
-    fig = Figure(figsize=(12, 8))
-    ax = fig.add_subplot(111)
+    # 创建图表
+    fig, ax = plt.subplots(figsize=(10, 5))
     
-    # 为每个模型绘制预测线
     for model_name, pred_values in predictions.items():
-        # 确保pred_values是列表
-        if not isinstance(pred_values, (list, np.ndarray)):
-            pred_values = [pred_values] * num_days
-        elif len(pred_values) < num_days:
-            # 如果预测值数量少于日期数量，复制最后一个值
-            last_value = pred_values[-1]
-            pred_values = list(pred_values) + [last_value] * (num_days - len(pred_values))
-        elif len(pred_values) > num_days:
-            # 如果预测值数量多于日期数量，截取需要的部分
-            pred_values = pred_values[:num_days]
+        if len(pred_values) != len(pred_dates):
+            print(f"警告: {model_name} 的预测值数量与预测日期数量不匹配")
+            continue
         
         # 绘制预测线和点
-        line = ax.plot(date_range, pred_values, label=f"{model_name} Prediction", marker='o')
+        line = ax.plot(pred_dates, pred_values, label=model_name, marker='o')
         color = line[0].get_color()
         
         # 添加数据标签
-        for x, y in zip(date_range, pred_values):
+        for x, y in zip(pred_dates, pred_values):
             ax.annotate(f'{y:.2f}',
                        (x, y),
                        xytext=(0, 10),
@@ -47,18 +37,15 @@ def create_prediction_chart(predictions, start_date, end_date, master):
                                ec=color,
                                alpha=0.7))
     
-    ax.set_title("Stock Price Prediction")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Price (USD)")
-    ax.legend(loc='upper left')
-    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_title('Stock Price Prediction')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Predicted Price')
+    ax.legend()
+    ax.grid(True)
     
-    fig.autofmt_xdate()
-    fig.tight_layout()
-    
-    canvas = FigureCanvasTkAgg(fig, master=master)
+    # 将图表嵌入到Tkinter界面中
+    canvas = FigureCanvasTkAgg(fig, master=parent_frame)
     canvas.draw()
-    
     return canvas.get_tk_widget()
 
 def create_metrics_table(metrics, master):

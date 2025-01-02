@@ -5,15 +5,20 @@ from openpyxl import load_workbook
 
 class RecordKeeper:
     def __init__(self):
-        self.excel_path = './record/prediction_records.xlsx'
+        # 使用当前日期创建文件名
+        current_date = datetime.now().strftime('%Y%m%d')
+        self.excel_path = f'./record/prediction_records_{current_date}.xlsx'
         self.base_columns = [
             '记录日期',           # 记录日期时间
             '股票代码',            # 股票代码
             '训练数据起始日期',      # 训练数据起始日期
             '训练数据结束日期',        # 训练数据结束日期
             '模型名称',            # 模型名称
-            'RMSE', 'MAE', 'MAPE'   # 评估指标
+            'RMSE', 'MAE', 'MAPE',   # 评估指标
+            '训练时长（分钟）'       # 训练时长
         ]
+        # 确保record目录存在
+        os.makedirs('./record', exist_ok=True)
         self._initialize_excel()
     
     def _initialize_excel(self):
@@ -21,8 +26,9 @@ class RecordKeeper:
         if not os.path.exists(self.excel_path):
             df = pd.DataFrame(columns=self.base_columns)
             df.to_excel(self.excel_path, index=False)
+            print(f"创建新的记录文件: {self.excel_path}")
     
-    def add_record(self, stock_code, predictions, metrics, pred_dates, model_name, train_start_date, train_end_date):
+    def add_record(self, stock_code, predictions, metrics, pred_dates, model_name, train_start_date, train_end_date, train_duration):
         """添加新的预测记录"""
         try:
             print(f"\n开始添加记录...")
@@ -45,7 +51,8 @@ class RecordKeeper:
                 '模型名称': model_name,
                 'RMSE': round(metrics['RMSE'], 3),
                 'MAE': round(metrics['MAE'], 3),
-                'MAPE': round(metrics['MAPE'], 3)
+                'MAPE': round(metrics['MAPE'], 3),
+                '训练时长（分钟）': round(train_duration, 3)
             }
             
             # 添加预测日期作为列名，预测值作为值
@@ -92,7 +99,8 @@ class RecordKeeper:
                 pred_dates=test_dates,
                 model_name='TEST_MODEL',
                 train_start_date=datetime.now().date() - timedelta(days=365),
-                train_end_date=datetime.now().date()
+                train_end_date=datetime.now().date(),
+                train_duration=0
             )
             
             # 验证文件是否成功写入
