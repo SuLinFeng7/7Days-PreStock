@@ -162,8 +162,23 @@ class StockPredictionApp:
         metrics_frame = create_metrics_table(metrics, main_frame)
         metrics_frame.pack(pady=(0, 20), fill=tk.X)
         
-        # 添加图表
-        chart_widget = create_prediction_chart(predictions, start_date, end_date, main_frame)
+        # 获取历史数据
+        try:
+            end_date_str = datetime.now().strftime('%Y-%m-%d')
+            start_date_str = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            historical_data = get_stock_data(self.stock_id.get(), start_date_str, end_date_str)
+        except Exception as e:
+            self.update_status(f"获取历史数据时发生错误: {str(e)}")
+            historical_data = None
+        
+        # 添加图表（传入历史数据）
+        chart_widget = create_prediction_chart(
+            predictions, 
+            start_date, 
+            end_date, 
+            main_frame,
+            historical_data=historical_data
+        )
         chart_widget.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
         
         # 显示最佳预测结果
