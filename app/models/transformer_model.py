@@ -105,12 +105,14 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
         
         # 初始化模型
         model = Transformer()
-        criterion = nn.MSELoss()
+        criterion = nn.MSELoss()  # 使用MSE损失函数
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         
         # 训练模型
         best_model = None
         best_loss = float('inf')
+        patience = 15  # 早停耐心值
+        no_improve = 0  # 没有改善的轮数
         
         for epoch in range(epochs):
             model.train()
@@ -124,10 +126,23 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
                 optimizer.step()
                 total_loss += loss.item()
             
-            avg_loss = total_loss / len(train_loader)
-            if avg_loss < best_loss:
-                best_loss = avg_loss
+            # 计算验证集损失
+            model.eval()
+            with torch.no_grad():
+                val_outputs, _ = model(X_test)
+                val_loss = criterion(val_outputs, y_test)
+            
+            # 早停检查
+            if val_loss < best_loss:
+                best_loss = val_loss
                 best_model = model.state_dict()
+                no_improve = 0
+            else:
+                no_improve += 1
+                
+            if no_improve >= patience:
+                print(f"Early stopping at epoch {epoch}")
+                break
             
             if progress_callback:
                 progress_callback(epoch + 1, epochs)

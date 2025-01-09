@@ -301,6 +301,56 @@ class StockPredictionApp:
         # 在指标选项卡中添加评估指标表格
         metrics_frame = create_metrics_table(metrics, metrics_tab)
         metrics_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 保存预测结果到Excel文件
+        try:
+            # 创建日期列表
+            date_range = []
+            current_date = start_date
+            while current_date <= end_date:
+                date_range.append(current_date.strftime('%Y-%m-%d'))
+                current_date += timedelta(days=1)
+            
+            # 创建预测数据DataFrame
+            prediction_data = {
+                '日期': date_range,
+                'LSTM预测值': predictions['LSTM'],
+                'CNN预测值': predictions['CNN'],
+                'Transformer预测值': predictions['Transformer']
+            }
+            df_predictions = pd.DataFrame(prediction_data)
+            
+            # 创建评估指标DataFrame
+            metrics_data = {
+                '模型': list(metrics.keys()),
+                'MAPE': [m['MAPE'] for m in metrics.values()],
+                'RMSE': [m['RMSE'] for m in metrics.values()],
+                'MAE': [m['MAE'] for m in metrics.values()]
+            }
+            df_metrics = pd.DataFrame(metrics_data)
+            
+            # 保存到Excel文件
+            filename = f"record/prediction_records_{end_date.strftime('%Y%m%d')}.xlsx"
+            with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                df_predictions.to_excel(writer, sheet_name='预测结果', index=False)
+                df_metrics.to_excel(writer, sheet_name='评估指标', index=False)
+            
+            self.update_status(f"预测结果已保存到文件: {filename}")
+            
+        except Exception as e:
+            self.update_status(f"保存预测结果时发生错误: {str(e)}")
+            
+        # 记录预测记录
+        self.record_keeper.add_record(
+            stock_code=self.stock_id.get(),
+            start_date=start_date,
+            end_date=end_date,
+            predictions=predictions,
+            metrics=metrics,
+            train_start_date=train_start,
+            train_end_date=train_end,
+            train_duration=train_duration
+        )
 
     def update_status(self, message, clear=False):
         """更新状态信息到文本区域"""
