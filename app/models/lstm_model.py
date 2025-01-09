@@ -23,26 +23,30 @@ class AttentionLayer(Layer):
 
 def create_lstm_model(input_shape):
     model = Sequential([
-        LSTM(units=64, return_sequences=True, input_shape=input_shape),
-        Dropout(0.2),
+        LSTM(units=128, return_sequences=True, input_shape=input_shape),
+        LayerNormalization(),
+        Dropout(0.1),
         
         AttentionLayer(),
         LayerNormalization(),
         
-        LSTM(units=32, return_sequences=True),
-        Dropout(0.2),
-        
-        LSTM(units=16, return_sequences=False),
+        LSTM(units=64, return_sequences=True),
+        LayerNormalization(),
         Dropout(0.1),
         
+        LSTM(units=32, return_sequences=False),
+        LayerNormalization(),
+        Dropout(0.1),
+        
+        Dense(units=64, activation='relu'),
+        BatchNormalization(),
         Dense(units=32, activation='relu'),
         BatchNormalization(),
-        Dropout(0.1),
-        Dense(units=1)
+        Dense(units=1, activation='linear')
     ])
     
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-    model.compile(optimizer=optimizer, loss='huber')  # 使用Huber损失函数
+    model.compile(optimizer=optimizer, loss='mse')
     return model
 
 def train_lstm_model(X_train, y_train, X_test, y_test, progress_callback=None):
@@ -55,14 +59,14 @@ def train_lstm_model(X_train, y_train, X_test, y_test, progress_callback=None):
     
     callbacks = [
         EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True),
+        ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6),
         ProgressCallback() if progress_callback else None
     ]
     
-    # 使用更大的batch_size
     history = model.fit(
         X_train, y_train,
         epochs=70,
-        batch_size=64,
+        batch_size=32,
         validation_data=(X_test, y_test),
         callbacks=[cb for cb in callbacks if cb],
         verbose=1
