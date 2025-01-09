@@ -8,3 +8,4 @@ matplotlib>=3.4.3
 pyecharts>=2.0.0
 tkinter
 tkcalendar
+ttkthemes>=3.2.2

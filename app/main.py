@@ -8,65 +8,175 @@ from models.model_trainer import ModelTrainer
 from utils.visualization import create_prediction_chart, create_metrics_table
 from utils.record_keeper import RecordKeeper
 import numpy as np
+from ttkthemes import ThemedTk  # 新增主题支持
 
 class StockPredictionApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("股票预测系统")
-        self.root.geometry("600x400")
-        self.record_keeper = RecordKeeper()  # 添加记录器
+    def __init__(self):
+        self.root = ThemedTk(theme="arc")  # 使用现代化主题
+        self.root.title("智能股票预测系统")
+        self.root.geometry("1200x800")  # 增加窗口大小
         
-        # 创建界面元素
+        # 添加默认股票列表
+        self.default_stocks = [
+            "600104.SH",  # 上汽集团
+            "002594.SZ",  # 比亚迪
+            "601127.SH",  # 小康股份
+            "TSLA"        # 特斯拉
+        ]
+        
+        # 设置整体样式
+        self.style = ttk.Style()
+        self.style.configure('Custom.TFrame', background='#f0f0f0')
+        self.style.configure('Custom.TLabel', background='#f0f0f0', font=('Microsoft YaHei UI', 10))
+        self.style.configure('Title.TLabel', font=('Microsoft YaHei UI', 16, 'bold'))
+        self.style.configure('Custom.TButton', font=('Microsoft YaHei UI', 10))
+        
+        self.record_keeper = RecordKeeper()
         self.create_widgets()
         
     def create_widgets(self):
-        # 股票代码输入
-        tk.Label(self.root, text="股票代码:").pack(pady=5)
-        self.stock_id = tk.Entry(self.root)
-        self.stock_id.pack(pady=5)
+        # 主容器
+        main_container = ttk.Frame(self.root, style='Custom.TFrame')
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # 训练数据年限选择
-        year_frame = tk.Frame(self.root)
-        year_frame.pack(pady=5)
+        # 左侧面板 - 输入区域
+        left_panel = ttk.Frame(main_container, style='Custom.TFrame')
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=10, pady=10)
         
-        tk.Label(year_frame, text="训练数据年限:").pack(side=tk.LEFT)
-        self.year_var = tk.StringVar(value="3")  # 默认3年
-        year_choices = [str(i) for i in range(1, 11)]  # 1到10年
+        # 标题
+        title_label = ttk.Label(
+            left_panel, 
+            text="股票预测配置", 
+            style='Title.TLabel'
+        )
+        title_label.pack(pady=(0, 20))
+        
+        # 股票代码输入框和下拉框组合
+        stock_frame = ttk.Frame(left_panel, style='Custom.TFrame')
+        stock_frame.pack(fill=tk.X, pady=10)
+        ttk.Label(stock_frame, text="股票代码:", style='Custom.TLabel').pack(side=tk.LEFT)
+        
+        # 创建组合框
+        self.stock_id = ttk.Combobox(
+            stock_frame,
+            values=self.default_stocks,
+            font=('Microsoft YaHei UI', 10),
+            width=15
+        )
+        self.stock_id.set(self.default_stocks[0])  # 设置默认值
+        self.stock_id.pack(side=tk.LEFT, padx=10)
+        
+        # 允许手动输入
+        self.stock_id.configure(state='normal')
+        
+        # 训练年限选择
+        year_frame = ttk.Frame(left_panel, style='Custom.TFrame')
+        year_frame.pack(fill=tk.X, pady=10)
+        ttk.Label(year_frame, text="训练年限:", style='Custom.TLabel').pack(side=tk.LEFT)
+        self.year_var = tk.StringVar(value="3")
+        year_choices = [str(i) for i in range(1, 11)]
         year_menu = ttk.Combobox(
-            year_frame, 
+            year_frame,
             textvariable=self.year_var,
             values=year_choices,
             width=5,
-            state="readonly"
+            state="readonly",
+            font=('Microsoft YaHei UI', 10)
         )
-        year_menu.pack(side=tk.LEFT, padx=5)
-        tk.Label(year_frame, text="年").pack(side=tk.LEFT)
+        year_menu.pack(side=tk.LEFT, padx=10)
+        ttk.Label(year_frame, text="年", style='Custom.TLabel').pack(side=tk.LEFT)
         
-        # 日期选择
-        date_frame = tk.Frame(self.root)
-        date_frame.pack(pady=10)
+        # 日期选择区域
+        date_frame = ttk.LabelFrame(
+            left_panel, 
+            text="预测时间范围",
+            style='Custom.TFrame'
+        )
+        date_frame.pack(fill=tk.X, pady=20)
         
-        tk.Label(date_frame, text="开始日期:").grid(row=0, column=0)
-        self.start_date = DateEntry(date_frame, width=12, background='darkblue',
-                                  foreground='white', borderwidth=2)
-        self.start_date.grid(row=0, column=1, padx=5)
+        # 开始日期
+        start_date_frame = ttk.Frame(date_frame, style='Custom.TFrame')
+        start_date_frame.pack(fill=tk.X, pady=10, padx=10)
+        ttk.Label(start_date_frame, text="开始日期:", style='Custom.TLabel').pack(side=tk.LEFT)
+        self.start_date = DateEntry(
+            start_date_frame,
+            width=12,
+            background='darkblue',
+            foreground='white',
+            borderwidth=2,
+            font=('Microsoft YaHei UI', 10)
+        )
+        self.start_date.pack(side=tk.LEFT, padx=10)
         
-        tk.Label(date_frame, text="结束日期:").grid(row=0, column=2)
-        self.end_date = DateEntry(date_frame, width=12, background='darkblue',
-                                foreground='white', borderwidth=2)
-        self.end_date.grid(row=0, column=3, padx=5)
+        # 结束日期
+        end_date_frame = ttk.Frame(date_frame, style='Custom.TFrame')
+        end_date_frame.pack(fill=tk.X, pady=10, padx=10)
+        ttk.Label(end_date_frame, text="结束日期:", style='Custom.TLabel').pack(side=tk.LEFT)
+        
+        # 设置默认结束日期为6天后
+        default_end_date = datetime.now().date() + timedelta(days=6)
+        self.end_date = DateEntry(
+            end_date_frame,
+            width=12,
+            background='darkblue',
+            foreground='white',
+            borderwidth=2,
+            font=('Microsoft YaHei UI', 10),
+            year=default_end_date.year,
+            month=default_end_date.month,
+            day=default_end_date.day
+        )
+        self.end_date.pack(side=tk.LEFT, padx=10)
         
         # 进度条
-        self.progress = ttk.Progressbar(self.root, length=400, mode='determinate')
-        self.progress.pack(pady=20)
+        progress_frame = ttk.Frame(left_panel, style='Custom.TFrame')
+        progress_frame.pack(fill=tk.X, pady=20)
+        self.progress = ttk.Progressbar(
+            progress_frame,
+            length=300,
+            mode='determinate',
+            style='Custom.Horizontal.TProgressbar'
+        )
+        self.progress.pack()
         
         # 开始预测按钮
-        tk.Button(self.root, text="开始预测", command=self.start_prediction).pack(pady=10)
+        button_frame = ttk.Frame(left_panel, style='Custom.TFrame')
+        button_frame.pack(fill=tk.X, pady=20)
+        start_button = ttk.Button(
+            button_frame,
+            text="开始预测",
+            command=self.start_prediction,
+            style='Custom.TButton'
+        )
+        start_button.pack(pady=10)
         
-        # 结果显示区域
-        self.result_text = tk.Text(self.root, height=10, width=50)
-        self.result_text.pack(pady=10)
+        # 右侧面板 - 结果显示区域
+        right_panel = ttk.Frame(main_container, style='Custom.TFrame')
+        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        # 状态信息显示区域
+        status_frame = ttk.LabelFrame(
+            right_panel,
+            text="运行状态",
+            style='Custom.TFrame'
+        )
+        status_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.result_text = tk.Text(
+            status_frame,
+            height=10,
+            width=50,
+            font=('Microsoft YaHei UI', 10),
+            wrap=tk.WORD,
+            bg='#ffffff'
+        )
+        self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 添加滚动条
+        scrollbar = ttk.Scrollbar(status_frame, orient="vertical", command=self.result_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.result_text.configure(yscrollcommand=scrollbar.set)
+
     def validate_dates(self):
         start = self.start_date.get_date()
         end = self.end_date.get_date()
@@ -143,26 +253,34 @@ class StockPredictionApp:
     def show_results(self, predictions, metrics, start_date, end_date, train_start, train_end, train_duration):
         # 创建新窗口显示结果
         result_window = tk.Toplevel(self.root)
-        result_window.title("预测结果")
-        result_window.geometry("800x800")  # 增加窗口高度以适应所有内容
+        result_window.title("预测结果分析")
+        result_window.geometry("1000x800")
         
-        # 创建一个主框架来容纳所有内容
-        main_frame = tk.Frame(result_window)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # 设置结果窗口样式
+        result_frame = ttk.Frame(result_window, style='Custom.TFrame')
+        result_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # 添加标题
-        title_label = tk.Label(
-            main_frame,
-            text="Stock Price Prediction Results",
-            font=('Arial', 14, 'bold')
+        # 标题
+        title_label = ttk.Label(
+            result_frame,
+            text="股票预测结果分析报告",
+            style='Title.TLabel'
         )
-        title_label.pack(pady=(0, 10))
+        title_label.pack(pady=(0, 20))
         
-        # 添加表格（放在图表上方）
-        metrics_frame = create_metrics_table(metrics, main_frame)
-        metrics_frame.pack(pady=(0, 20), fill=tk.X)
+        # 创建选项卡
+        notebook = ttk.Notebook(result_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
         
-        # 获取历史数据
+        # 图表选项卡
+        chart_tab = ttk.Frame(notebook, style='Custom.TFrame')
+        notebook.add(chart_tab, text="预测趋势图")
+        
+        # 指标选项卡
+        metrics_tab = ttk.Frame(notebook, style='Custom.TFrame')
+        notebook.add(metrics_tab, text="模型评估指标")
+        
+        # 在图表选项卡中添加图表
         try:
             end_date_str = datetime.now().strftime('%Y-%m-%d')
             start_date_str = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
@@ -170,54 +288,19 @@ class StockPredictionApp:
         except Exception as e:
             self.update_status(f"获取历史数据时发生错误: {str(e)}")
             historical_data = None
-        
-        # 添加图表（传入历史数据）
+            
         chart_widget = create_prediction_chart(
-            predictions, 
-            start_date, 
-            end_date, 
-            main_frame,
+            predictions,
+            start_date,
+            end_date,
+            chart_tab,
             historical_data=historical_data
         )
-        chart_widget.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
+        chart_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # 显示最佳预测结果
-        best_model = min(metrics.items(), key=lambda x: x[1]['MAPE'])[0]
-        best_prediction = predictions[best_model][0] if isinstance(predictions[best_model], (list, np.ndarray)) else predictions[best_model]
-        
-        result_label = tk.Label(
-            main_frame, 
-            text=f"Best Prediction ({best_model} Model): {best_prediction:.2f}",
-            font=('Arial', 12, 'bold')
-        )
-        result_label.pack(pady=(0, 10))
-        
-        # 添加状态更新
-        self.update_status("正在保存预测记录...")
-        
-        # 生成预测日期列表
-        pred_dates = pd.date_range(start=start_date, end=end_date)
-        
-        # 为每个模型保存记录
-        for model_name, pred_values in predictions.items():
-            # 确保pred_values是列表形式
-            if not isinstance(pred_values, (list, np.ndarray)):
-                pred_values = [pred_values]
-            
-            try:
-                self.record_keeper.add_record(
-                    stock_code=self.stock_id.get(),
-                    predictions=pred_values,
-                    metrics=metrics[model_name],
-                    pred_dates=pred_dates,
-                    model_name=model_name,
-                    train_start_date=train_start,
-                    train_end_date=train_end,
-                    train_duration=train_duration  # 传递训练时长
-                )
-                self.update_status(f"{model_name} 模型预测记录保存成功")
-            except Exception as e:
-                self.update_status(f"保存 {model_name} 模型记录时发生错误: {str(e)}")
+        # 在指标选项卡中添加评估指标表格
+        metrics_frame = create_metrics_table(metrics, metrics_tab)
+        metrics_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     def update_status(self, message, clear=False):
         """更新状态信息到文本区域"""
@@ -232,6 +315,5 @@ class StockPredictionApp:
         self.root.update()
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = StockPredictionApp(root)
-    root.mainloop()
+    app = StockPredictionApp()
+    app.root.mainloop()
