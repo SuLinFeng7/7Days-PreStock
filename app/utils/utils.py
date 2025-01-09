@@ -1,26 +1,27 @@
 import numpy as np
-from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-def calculate_metrics(y_true, y_pred):
-    """
-    计算评估指标
-    """
-    # 确保输入是numpy数组
+def calculate_mape(y_true, y_pred):
+    """计算平均绝对百分比误差"""
     y_true = np.array(y_true).flatten()
     y_pred = np.array(y_pred).flatten()
-    
-    # 计算RMSE
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    
-    # 计算MAE
-    mae = mean_absolute_error(y_true, y_pred)
-    
-    # 计算MAPE
-    epsilon = 1e-10  # 很小的数
-    mape = np.mean(np.abs((y_true - y_pred) / (y_true + epsilon))) * 100
-    
-    # 如果MAPE不合理，使用另一种计算方法
-    if mape > 100 or np.isnan(mape):
-        mape = np.mean(np.abs(y_true - y_pred) / np.mean(y_true)) * 100
-    
-    return mape, rmse, mae
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+def calculate_rmse(y_true, y_pred):
+    """计算均方根误差"""
+    y_true = np.array(y_true).flatten()
+    y_pred = np.array(y_pred).flatten()
+    return np.sqrt(np.mean((y_true - y_pred) ** 2))
+
+def calculate_mae(y_true, y_pred):
+    """计算平均绝对误差"""
+    y_true = np.array(y_true).flatten()
+    y_pred = np.array(y_pred).flatten()
+    return np.mean(np.abs(y_true - y_pred))
+
+def calculate_metrics(y_true, y_pred):
+    """计算所有评估指标"""
+    return (
+        calculate_mape(y_true, y_pred),
+        calculate_rmse(y_true, y_pred),
+        calculate_mae(y_true, y_pred)
+    )

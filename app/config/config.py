@@ -24,6 +24,12 @@ CNN_PARAMS = {
 }
 
 TRANSFORMER_PARAMS = {
+    'd_model': 128,
+    'd_ff': 512,
+    'n_layers': 3,
+    'n_heads': 4,
+    'feature': 6,
     'epochs': 50,
-    'batch_size': 32
+    'batch_size': 64,
+    'learning_rate': 0.001
 }

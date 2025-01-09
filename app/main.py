@@ -314,6 +314,14 @@ class StockPredictionApp:
         self.result_text.see(tk.END)
         self.root.update()
 
+    def get_prediction_data(self):
+        """获取当前预测设置的数据，用于测试"""
+        return {
+            'stock_id': self.stock_id.get(),
+            'start_date': self.start_date.get_date(),
+            'end_date': self.end_date.get_date()
+        }
+
 if __name__ == "__main__":
     app = StockPredictionApp()
     app.root.mainloop()
