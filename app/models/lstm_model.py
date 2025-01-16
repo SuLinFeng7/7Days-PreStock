@@ -23,21 +23,23 @@ class AttentionLayer(Layer):
 
 def create_lstm_model(input_shape):
     model = Sequential([
-        LSTM(units=128, return_sequences=True, input_shape=input_shape),
+        LSTM(units=256, return_sequences=True, input_shape=input_shape),
         LayerNormalization(),
         Dropout(0.1),
         
         AttentionLayer(),
         LayerNormalization(),
         
-        LSTM(units=64, return_sequences=True),
+        LSTM(units=128, return_sequences=True),
         LayerNormalization(),
         Dropout(0.1),
         
-        LSTM(units=32, return_sequences=False),
+        LSTM(units=64, return_sequences=False),
         LayerNormalization(),
         Dropout(0.1),
         
+        Dense(units=128, activation='relu'),
+        BatchNormalization(),
         Dense(units=64, activation='relu'),
         BatchNormalization(),
         Dense(units=32, activation='relu'),
@@ -55,18 +57,29 @@ def train_lstm_model(X_train, y_train, X_test, y_test, progress_callback=None):
     class ProgressCallback(tf.keras.callbacks.Callback):
         def on_epoch_end(self, epoch, logs=None):
             if progress_callback:
-                progress_callback(epoch + 1, 70)
+                progress_callback(epoch + 1, 100)
     
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True),
-        ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6),
+        EarlyStopping(
+            monitor='val_loss',
+            patience=20,
+            restore_best_weights=True,
+            verbose=1
+        ),
+        ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.2,
+            patience=10,
+            min_lr=1e-6,
+            verbose=1
+        ),
         ProgressCallback() if progress_callback else None
     ]
     
     history = model.fit(
         X_train, y_train,
-        epochs=70,
-        batch_size=32,
+        epochs=100,
+        batch_size=16,
         validation_data=(X_test, y_test),
         callbacks=[cb for cb in callbacks if cb],
         verbose=1
