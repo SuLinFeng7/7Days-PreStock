@@ -9,6 +9,7 @@ from utils.visualization import create_prediction_chart, create_metrics_table
 from utils.record_keeper import RecordKeeper
 import numpy as np
 from ttkthemes import ThemedTk  # 新增主题支持
+from config.model_versions import MODEL_VERSIONS  # 添加模型版本配置导入
 
 class StockPredictionApp:
     def __init__(self):
@@ -320,20 +321,37 @@ class StockPredictionApp:
             }
             df_predictions = pd.DataFrame(prediction_data)
             
-            # 创建评估指标DataFrame
-            metrics_data = {
-                '模型': list(metrics.keys()),
-                'MAPE': [m['MAPE'] for m in metrics.values()],
-                'RMSE': [m['RMSE'] for m in metrics.values()],
-                'MAE': [m['MAE'] for m in metrics.values()]
-            }
+            # 创建评估指标DataFrame，加入版本信息
+            metrics_data = []
+            for model_name, metric in metrics.items():
+                model_info = MODEL_VERSIONS[model_name]
+                metrics_data.append({
+                    '模型': model_name,
+                    '版本': model_info['version'],
+                    'MAPE': metric['MAPE'],
+                    'RMSE': metric['RMSE'],
+                    'MAE': metric['MAE']
+                })
             df_metrics = pd.DataFrame(metrics_data)
+            
+            # 创建模型参数DataFrame
+            model_params_data = []
+            for model_name, info in MODEL_VERSIONS.items():
+                params = info['parameters']
+                params_str = ', '.join([f"{k}: {v}" for k, v in params.items()])
+                model_params_data.append({
+                    '模型': model_name,
+                    '版本': info['version'],
+                    '参数配置': params_str
+                })
+            df_model_params = pd.DataFrame(model_params_data)
             
             # 保存到Excel文件
             filename = f"record/prediction_records_{end_date.strftime('%Y%m%d')}.xlsx"
             with pd.ExcelWriter(filename, engine='openpyxl') as writer:
                 df_predictions.to_excel(writer, sheet_name='预测结果', index=False)
                 df_metrics.to_excel(writer, sheet_name='评估指标', index=False)
+                df_model_params.to_excel(writer, sheet_name='模型配置', index=False)
             
             self.update_status(f"预测结果已保存到文件: {filename}")
             
