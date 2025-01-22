@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
+from datetime import datetime, timedelta
+from config.config import TUSHARE_TOKEN, TRAIN_TEST_SPLIT
 
 def get_stock_data(stock_id, start_date, end_date):
     """获取股票数据"""
@@ -11,11 +13,10 @@ def get_stock_data(stock_id, start_date, end_date):
         # 判断是否为A股
         if '.SH' in stock_id or '.SZ' in stock_id:
             # 使用tushare获取A股数据
-            pro = ts.pro_api('0648c566c4cd4d547549ef08dfe17ba164b1e30c50f3732730f9093b')
+            pro = ts.pro_api(TUSHARE_TOKEN)  # 现在可以使用 TUSHARE_TOKEN 了
             
-            # 获取更长时间的历史数据
-            # 对于A股，从2010年开始获取数据
-            start_date_ts = '20100101' if '.SH' in stock_id else '20100101'
+            # 获取10年的历史数据
+            start_date_ts = (datetime.now() - timedelta(days=365*10)).strftime('%Y%m%d')
             end_date_ts = end_date.replace('-', '')
             
             df = pro.daily(ts_code=stock_id, 
@@ -33,8 +34,8 @@ def get_stock_data(stock_id, start_date, end_date):
             
         else:
             # 使用yfinance获取其他市场数据
-            # 对于美股，从2000年开始获取数据
-            start_date = "2000-01-01"
+            # 对于美股，从10年前开始获取数据
+            start_date = (datetime.now() - timedelta(days=365*10)).strftime('%Y-%m-%d')
             stock = yf.download(stock_id, start=start_date, end=end_date, progress=False)
             
             if stock.empty:
@@ -58,7 +59,7 @@ def create_sequences(data, window_size, prediction_steps):
         y.append(data[i + prediction_steps - 1, 0])
     return np.array(X), np.array(y)
 
-def prepare_prediction_data(df, window_size=20, prediction_steps=10):
+def prepare_prediction_data(df, window_size=20):
     """准备预测数据"""
     if 'adjClose' in df.columns:
         data = df['adjClose'].values.reshape(-1, 1)
@@ -105,14 +106,21 @@ def prepare_prediction_data(df, window_size=20, prediction_steps=10):
     
     # 创建序列数据
     X, y = [], []
-    for i in range(window_size, len(scaled_features) - prediction_steps):
+    for i in range(window_size, len(scaled_features)):
         X.append(scaled_features[i-window_size:i])
-        y.append(scaled_price[i+prediction_steps-1, 0])
+        y.append(scaled_price[i, 0])
     
     X, y = np.array(X), np.array(y)
-    train_size = int(len(X) * 0.85)
     
-    return X[:train_size], y[:train_size], X[train_size:], y[train_size:], price_scaler
+    # 修改训练测试集划分逻辑
+    total_samples = len(X)
+    train_size = int(total_samples * TRAIN_TEST_SPLIT)  # 使用前80%数据训练
+    
+    # 划分训练集和测试集
+    X_train, y_train = X[:train_size], y[:train_size]
+    X_test, y_test = X[train_size:], y[train_size:]
+    
+    return X_train, y_train, X_test, y_test, price_scaler, feature_scaler
 
 def calculate_rsi(prices, period=14):
     """计算RSI指标"""
