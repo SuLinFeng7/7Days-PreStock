@@ -5,6 +5,8 @@ import tkinter as tk
 from datetime import timedelta, datetime
 import pandas as pd
 import numpy as np
+from pyecharts import options as opts
+from pyecharts.charts import Line, Grid, Bar
 
 def create_prediction_chart(predictions, start_date, end_date, parent_frame, historical_data=None):
     """
@@ -187,4 +189,96 @@ def create_metrics_table(metrics, master):
     for i in range(4):
         table_frame.grid_columnconfigure(i, weight=1)
     
-    return table_frame 
+    return table_frame
+
+def create_historical_comparison_chart(historical_predictions, start_date=None):
+    """
+    创建历史预测对比图表
+    Args:
+        historical_predictions: 包含预测值和实际值的字典
+        start_date: 开始日期,如果为None则从当前日期往前推2年
+    """
+    if start_date is None:
+        start_date = (datetime.now() - timedelta(days=365*2)).strftime('%Y-%m-%d')
+    
+    line = Line()
+    line.set_global_opts(
+        title_opts=opts.TitleOpts(title="最近两年预测对比"),
+        tooltip_opts=opts.TooltipOpts(trigger="axis"),
+        xaxis_opts=opts.AxisOpts(type_="time"),
+        yaxis_opts=opts.AxisOpts(type_="value"),
+        datazoom_opts=[opts.DataZoomOpts()],
+        legend_opts=opts.LegendOpts(pos_top="5%")
+    )
+    
+    # 生成日期列表
+    dates = pd.date_range(start=start_date, periods=len(next(iter(historical_predictions.values()))['actual']))
+    
+    # 添加每个模型的预测结果
+    for model_name, data in historical_predictions.items():
+        if '_historical' in model_name:
+            model_display_name = model_name.replace('_historical', '')
+            line.add_xaxis(dates.strftime('%Y-%m-%d').tolist())
+            line.add_yaxis(
+                f"{model_display_name}_预测",
+                data['predicted'].tolist(),
+                is_symbol_show=False,
+                linestyle_opts=opts.LineStyleOpts(width=1)
+            )
+    
+    # 添加实际值
+    line.add_yaxis(
+        "实际值",
+        next(iter(historical_predictions.values()))['actual'].tolist(),
+        is_symbol_show=False,
+        linestyle_opts=opts.LineStyleOpts(width=2)
+    )
+    
+    return line
+
+def create_metrics_comparison_chart(metrics):
+    """
+    创建模型评估指标对比图表
+    """
+    bar = Bar()
+    bar.set_global_opts(
+        title_opts=opts.TitleOpts(title="模型评估指标对比"),
+        tooltip_opts=opts.TooltipOpts(trigger="axis"),
+        xaxis_opts=opts.AxisOpts(type_="category"),
+        yaxis_opts=opts.AxisOpts(type_="value"),
+        legend_opts=opts.LegendOpts(pos_top="5%")
+    )
+    
+    # 准备数据
+    models = []
+    mape_values = []
+    rmse_values = []
+    mae_values = []
+    
+    for model_name, metric in metrics.items():
+        if '_historical' in model_name:
+            models.append(model_name.replace('_historical', ''))
+            mape_values.append(metric['MAPE'])
+            rmse_values.append(metric['RMSE'])
+            mae_values.append(metric['MAE'])
+    
+    # 添加数据
+    bar.add_xaxis(models)
+    bar.add_yaxis("MAPE (%)", mape_values)
+    bar.add_yaxis("RMSE", rmse_values)
+    bar.add_yaxis("MAE", mae_values)
+    
+    return bar
+
+def create_combined_chart(historical_predictions, metrics):
+    """
+    创建组合图表
+    """
+    historical_chart = create_historical_comparison_chart(historical_predictions)
+    metrics_chart = create_metrics_comparison_chart(metrics)
+    
+    grid = Grid()
+    grid.add(historical_chart, grid_opts=opts.GridOpts(pos_bottom="60%"))
+    grid.add(metrics_chart, grid_opts=opts.GridOpts(pos_top="60%"))
+    
+    return grid 

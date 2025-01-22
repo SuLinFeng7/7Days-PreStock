@@ -3,7 +3,9 @@ TUSHARE_TOKEN = '0648c566c4cd4d547549ef08dfe17ba164b1e30c50f3732730f9093b'
 
 # 模型参数配置
 TIMESTEPS = 60  # 时间步长
-TRAIN_YEARS = 3  # 训练数据年限
+TRAIN_YEARS = 10  # 总数据年限改为10年
+TRAIN_TEST_SPLIT = 0.8  # 训练集占比80%
+PREDICTION_DAYS = 30  # 未来预测天数
 
 # 模型训练参数
 LSTM_PARAMS = {

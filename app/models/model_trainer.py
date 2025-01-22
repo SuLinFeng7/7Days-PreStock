@@ -10,6 +10,7 @@ from utils.utils import (
 )
 from .transformer_model import train_transformer_model
 import torch
+from config.config import PREDICTION_DAYS
 
 class ModelTrainer:
     def __init__(self, data, progress_bar=None):
@@ -23,6 +24,7 @@ class ModelTrainer:
         self.total_steps = sum(model['epochs'] for model in self.models.values())
         self.current_step = 0
         self.current_model_epochs = 0
+        self.default_prediction_days = PREDICTION_DAYS
 
     def update_progress(self, completed_epochs, total_epochs):
         if self.progress_bar:
@@ -40,10 +42,11 @@ class ModelTrainer:
         try:
             predictions = {}
             metrics = {}
+            trained_models = {}
             self.current_step = 0
-            failed_models = []
-
-            X_train, y_train, X_test, y_test, scaler = prepare_prediction_data(self.data)
+            
+            # 获取10年数据并准备训练集和测试集
+            X_train, y_train, X_test, y_test, price_scaler, feature_scaler = prepare_prediction_data(self.data)
             
             # 确保数据类型正确
             X_train = np.array(X_train, dtype=np.float32)
@@ -62,19 +65,22 @@ class ModelTrainer:
                         self.update_progress
                     )
                     
+                    # 保存训练好的模型
+                    trained_models[model_name] = model
+                    
                     # 生成未来预测
                     last_sequence = X_test[-1:].copy()
                     future_predictions = []
                     
                     print(f"生成 {model_name} 模型的未来预测...")
-                    # 预测未来7天
-                    for day in range(7):
+                    # 预测未来30天
+                    for day in range(self.default_prediction_days):
                         # 根据模型类型选择预测方法
                         if model_name == 'Transformer':
                             # Transformer模型使用PyTorch
                             with torch.no_grad():
                                 last_sequence_tensor = torch.FloatTensor(last_sequence)
-                                next_pred, _ = model(last_sequence_tensor)
+                                next_pred = model(last_sequence_tensor)[0]
                                 next_pred = next_pred.numpy()
                         else:
                             # LSTM和CNN模型使用TensorFlow
@@ -86,23 +92,24 @@ class ModelTrainer:
                         
                         # 将预测值转换回实际价格
                         pred_reshaped = np.array([[next_pred]], dtype=np.float32)
-                        actual_price = scaler.inverse_transform(pred_reshaped)[0, 0]
+                        actual_price = price_scaler.inverse_transform(pred_reshaped)[0, 0]
                         future_predictions.append(float(actual_price))
                         
                         # 更新序列用于下一次预测
                         last_sequence = np.roll(last_sequence, -1, axis=1)
                         last_sequence[0, -1, 0] = float(next_pred)
                         
-                        print(f"第{day+1}天预测值: {actual_price:.2f}")
+                        if day % 5 == 0:  # 每5天打印一次，避免输出太多
+                            print(f"第{day+1}天预测值: {actual_price:.2f}")
                     
-                    predictions[model_name] = future_predictions
+                    predictions[f"{model_name}_future"] = future_predictions
                     
                     # 计算评估指标
                     mape = calculate_mape(y_true, y_pred)
                     rmse = calculate_rmse(y_true, y_pred)
                     mae = calculate_mae(y_true, y_pred)
                     
-                    metrics[model_name] = {
+                    metrics[f"{model_name}_future"] = {
                         'MAPE': float(mape),
                         'RMSE': float(rmse),
                         'MAE': float(mae)
@@ -114,16 +121,38 @@ class ModelTrainer:
                     print(f"{model_name} 模型训练失败: {str(e)}")
                     import traceback
                     print(traceback.format_exc())
-                    failed_models.append(model_name)
                     continue
                 
                 # 更新总进度
                 self.current_step += self.current_model_epochs
 
-            if failed_models:
-                print(f"\n警告: 以下模型训练失败: {', '.join(failed_models)}")
+            # 计算最近两年的预测准确度
+            historical_predictions = {}
+            for model_name, model in trained_models.items():
+                if model_name == 'Transformer':
+                    with torch.no_grad():
+                        X_test_tensor = torch.FloatTensor(X_test)
+                        y_pred, _ = model(X_test_tensor)
+                        y_pred = y_pred.numpy()
+                else:
+                    y_pred = model.predict(X_test, verbose=0)
+                
+                y_pred_actual = price_scaler.inverse_transform(y_pred.reshape(-1, 1))
+                y_test_actual = price_scaler.inverse_transform(y_test.reshape(-1, 1))
+                
+                historical_predictions[f"{model_name}_historical"] = {
+                    'predicted': y_pred_actual.flatten(),
+                    'actual': y_test_actual.flatten()
+                }
+                
+                # 计算评估指标
+                metrics[f"{model_name}_historical"] = {
+                    'MAPE': float(calculate_mape(y_test_actual, y_pred_actual)),
+                    'RMSE': float(calculate_rmse(y_test_actual, y_pred_actual)),
+                    'MAE': float(calculate_mae(y_test_actual, y_pred_actual))
+                }
             
-            return predictions, metrics 
+            return predictions, historical_predictions, metrics
             
         except Exception as e:
             print(f"模型训练过程中发生错误: {str(e)}")
