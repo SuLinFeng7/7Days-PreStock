@@ -26,12 +26,17 @@ CNN_PARAMS = {
 }
 
 TRANSFORMER_PARAMS = {
-    'd_model': 128,
-    'd_ff': 512,
-    'n_layers': 3,
-    'n_heads': 4,
-    'feature': 6,
-    'epochs': 50,
-    'batch_size': 64,
-    'learning_rate': 0.001
+    'd_model': 128,          # 模型维度
+    'd_ff': 512,            # 前馈网络维度
+    'num_layers': 3,        # 编码器层数
+    'n_heads': 8,           # 注意力头数
+    'dropout': 0.15,        # dropout率
+    'attention_dropout': 0.1, # 注意力dropout率
+    'epochs': 150,          # 训练轮数
+    'batch_size': 64,       # 批次大小
+    'warmup_steps': 4000,   # 预热步数
+    'learning_rate': 0.0001, # 学习率
+    'weight_decay': 0.01,   # 权重衰减
+    'clip_grad_norm': 1.0,  # 梯度裁剪阈值
+    'loss': 'huber'         # 损失函数类型
 }

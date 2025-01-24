@@ -1,3 +1,11 @@
+import sys
+import os
+
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
@@ -12,7 +20,6 @@ from ttkthemes import ThemedTk  # 新增主题支持
 from config.model_versions import MODEL_VERSIONS  # 添加模型版本配置导入
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import os
 
 # 添加以下字体设置
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
