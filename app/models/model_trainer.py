@@ -1,8 +1,8 @@
 import numpy as np
 from .lstm_model import train_lstm_model
 from .cnn_model import train_cnn_model
-from data.data_preprocessing import prepare_prediction_data
-from utils.utils import (
+from app.data.data_preprocessing import prepare_prediction_data
+from app.utils.utils import (
     calculate_metrics,
     calculate_mape,
     calculate_rmse,
@@ -10,7 +10,7 @@ from utils.utils import (
 )
 from .transformer_model import train_transformer_model
 import torch
-from config.config import PREDICTION_DAYS
+from app.config.config import PREDICTION_DAYS
 
 class ModelTrainer:
     def __init__(self, data, progress_bar=None):
@@ -19,14 +19,21 @@ class ModelTrainer:
         self.models = {
             'LSTM': {'func': train_lstm_model, 'epochs': 70},
             'CNN': {'func': train_cnn_model, 'epochs': 100},
-            'Transformer': {'func': train_transformer_model, 'epochs': 30}
+            'Transformer': {'func': train_transformer_model, 'epochs': 150}
         }
         self.total_steps = sum(model['epochs'] for model in self.models.values())
         self.current_step = 0
         self.current_model_epochs = 0
         self.default_prediction_days = PREDICTION_DAYS
 
-    def update_progress(self, completed_epochs, total_epochs):
+    def update_progress(self, completed_epochs, total_epochs, train_loss=None, val_loss=None):
+        """更新训练进度
+        Args:
+            completed_epochs: 已完成的训练轮数
+            total_epochs: 总训练轮数
+            train_loss: 训练损失
+            val_loss: 验证损失
+        """
         if self.progress_bar:
             try:
                 current_model_progress = completed_epochs / total_epochs
@@ -34,7 +41,13 @@ class ModelTrainer:
                                 * 100 / self.total_steps)
                 self.progress_bar['value'] = float(total_progress)
                 self.progress_bar.update()
-                print(f"训练进度: {total_progress:.1f}%", end='\r')
+                
+                # 添加损失值的显示
+                if train_loss is not None and val_loss is not None:
+                    print(f"\r训练进度: {total_progress:.1f}% - train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f}", end='\r')
+                else:
+                    print(f"\r训练进度: {total_progress:.1f}%", end='\r')
+                
             except Exception as e:
                 print(f"更新进度条时出错: {str(e)}")
 

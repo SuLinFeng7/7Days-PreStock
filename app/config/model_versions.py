@@ -23,16 +23,22 @@ MODEL_VERSIONS = {
         }
     },
     'Transformer': {
-        'version': 'V1.0',
+        'version': 'V2.0',
         'parameters': {
-            'n_heads': 4,
-            'num_layers': 2,
-            'd_model': 64,
-            'dropout': 0.1,
-            'epochs': 100,
-            'batch_size': 32,
-            'optimizer': 'adam',
-            'loss': 'mse'
+            'n_heads': 8,
+            'num_layers': 3,
+            'd_model': 128,
+            'd_ff': 512,
+            'dropout': 0.15,
+            'attention_dropout': 0.1,
+            'epochs': 150,
+            'batch_size': 64,
+            'warmup_steps': 4000,
+            'optimizer': 'adamw',
+            'weight_decay': 0.01,
+            'learning_rate': 0.0001,
+            'loss': 'huber',
+            'clip_grad_norm': 1.0
         }
     }
 } 
