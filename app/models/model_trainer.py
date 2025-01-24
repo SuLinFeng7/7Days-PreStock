@@ -11,6 +11,7 @@ from app.utils.utils import (
 from .transformer_model import train_transformer_model
 import torch
 from app.config.config import PREDICTION_DAYS
+from datetime import datetime
 
 class ModelTrainer:
     def __init__(self, data, progress_bar=None):
@@ -25,6 +26,7 @@ class ModelTrainer:
         self.current_step = 0
         self.current_model_epochs = 0
         self.default_prediction_days = PREDICTION_DAYS
+        self.training_times = {}  # 添加训练时间记录字典
 
     def update_progress(self, completed_epochs, total_epochs, train_loss=None, val_loss=None):
         """更新训练进度
@@ -72,11 +74,20 @@ class ModelTrainer:
                     print(f"\n开始训练 {model_name} 模型...")
                     self.current_model_epochs = int(model_info['epochs'])
                     
+                    # 记录开始时间
+                    start_time = datetime.now()
+                    
                     # 训练模型
                     y_pred, y_true, model = model_info['func'](
                         X_train, y_train, X_test, y_test, 
                         self.update_progress
                     )
+                    
+                    # 记录结束时间并计算训练时长
+                    end_time = datetime.now()
+                    training_duration = (end_time - start_time).total_seconds() / 60  # 转换为分钟
+                    self.training_times[model_name] = training_duration
+                    print(f"\n{model_name} 模型训练完成，耗时: {training_duration:.2f} 分钟")
                     
                     # 保存训练好的模型
                     trained_models[model_name] = model
@@ -128,8 +139,6 @@ class ModelTrainer:
                         'MAE': float(mae)
                     }
                     
-                    print(f"{model_name} 模型训练完成")
-                    
                 except Exception as e:
                     print(f"{model_name} 模型训练失败: {str(e)}")
                     import traceback
@@ -162,8 +171,14 @@ class ModelTrainer:
                 metrics[f"{model_name}_historical"] = {
                     'MAPE': float(calculate_mape(y_test_actual, y_pred_actual)),
                     'RMSE': float(calculate_rmse(y_test_actual, y_pred_actual)),
-                    'MAE': float(calculate_mae(y_test_actual, y_pred_actual))
+                    'MAE': float(calculate_mae(y_test_actual, y_pred_actual)),
+                    'training_time': self.training_times[model_name]  # 添加训练时长到指标中
                 }
+            
+            # 打印所有模型的训练时长
+            print("\n各模型训练时长:")
+            for model_name, duration in self.training_times.items():
+                print(f"{model_name}: {duration:.2f} 分钟")
             
             return predictions, historical_predictions, metrics
             
@@ -171,4 +186,4 @@ class ModelTrainer:
             print(f"模型训练过程中发生错误: {str(e)}")
             import traceback
             print(traceback.format_exc())
-            raise e 
+            raise e
