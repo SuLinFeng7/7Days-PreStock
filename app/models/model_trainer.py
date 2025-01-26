@@ -138,12 +138,13 @@ class ModelTrainer:
                             **adjusted_params
                         )
                         
-                        # 评估预测质量
-                        needs_adjustment = self.evaluate_prediction_quality(y_true, y_pred)
-                        
-                        if needs_adjustment and retry_count < model_info['max_retries'] - 1:
-                            print(f"\n{model_name} 模型预测效果不理想，正在调整参数重新训练...")
+                        # 检查模型训练是否成功
+                        if y_pred is None or y_true is None or model is None:
+                            print(f"\n{model_name} 模型训练失败，尝试重新训练...")
                             retry_count += 1
+                            if retry_count >= model_info['max_retries']:
+                                print(f"{model_name} 模型达到最大重试次数，跳过该模型")
+                                continue
                             continue
                         
                         # 记录结束时间并计算训练时长

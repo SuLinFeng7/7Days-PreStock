@@ -10,6 +10,8 @@ Transformer模型实现文件
 6. 实现学习率预热和衰减策略
 7. 添加梯度裁剪防止梯度爆炸
 8. 支持动态参数调整
+9. 添加多尺度特征提取
+10. 实现突发事件处理机制
 """
 
 import sys
@@ -70,6 +72,81 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:, :x.size(1)]
         return self.dropout(x)
 
+class MultiScaleConv(nn.Module):
+    """多尺度卷积模块"""
+    def __init__(self, in_channels, out_channels):
+        super(MultiScaleConv, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=1)
+        self.conv3 = nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv1d(in_channels, out_channels, kernel_size=5, padding=2)
+        self.conv7 = nn.Conv1d(in_channels, out_channels, kernel_size=7, padding=3)
+        self.norm = nn.LayerNorm(out_channels * 4)
+        
+    def forward(self, x):
+        # 转换维度以适应卷积操作
+        x = x.transpose(1, 2)
+        
+        # 不同尺度的卷积
+        y1 = self.conv1(x)
+        y3 = self.conv3(x)
+        y5 = self.conv5(x)
+        y7 = self.conv7(x)
+        
+        # 合并不同尺度的特征
+        out = torch.cat([y1, y3, y5, y7], dim=1)
+        out = out.transpose(1, 2)
+        
+        return self.norm(out)
+
+class EventDetectionAttention(nn.Module):
+    """突发事件检测注意力模块"""
+    def __init__(self, d_model, threshold=2.0):
+        super(EventDetectionAttention, self).__init__()
+        self.threshold = threshold
+        self.event_dense = nn.Linear(d_model, d_model)
+        self.attention = nn.MultiheadAttention(d_model, 1, batch_first=True)
+        self.norm = nn.LayerNorm(d_model)
+        
+    def forward(self, x):
+        # 计算移动平均和标准差
+        mean = torch.mean(x, dim=1, keepdim=True)
+        std = torch.std(x, dim=1, keepdim=True)
+        
+        # 检测异常值
+        z_scores = torch.abs(x - mean) / (std + 1e-6)
+        event_mask = (z_scores > self.threshold).float()
+        
+        # 对异常值特别关注
+        event_features = self.event_dense(x)
+        attention_output, _ = self.attention(
+            event_features * event_mask,
+            event_features,
+            event_features
+        )
+        
+        return self.norm(x + attention_output)
+
+class AdaptiveAttention(nn.Module):
+    """自适应注意力模块"""
+    def __init__(self, d_model, n_heads):
+        super(AdaptiveAttention, self).__init__()
+        self.mha = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        self.adaptive_weights = nn.Parameter(torch.ones(n_heads) / n_heads)
+        self.norm = nn.LayerNorm(d_model)
+        
+    def forward(self, x):
+        # 计算多头注意力
+        attention_outputs = []
+        for i in range(len(self.adaptive_weights)):
+            output, _ = self.mha(x, x, x)
+            attention_outputs.append(output)
+        
+        # 自适应加权
+        weights = torch.softmax(self.adaptive_weights, dim=0)
+        weighted_output = sum(w * out for w, out in zip(weights, attention_outputs))
+        
+        return self.norm(x + weighted_output)
+
 class TimeSeriesTransformer(nn.Module):
     """
     Transformer模型主体
@@ -95,27 +172,35 @@ class TimeSeriesTransformer(nn.Module):
         self.dropout = params.get('dropout', TRANSFORMER_PARAMS['dropout'])
         self.attention_dropout = params.get('attention_dropout', TRANSFORMER_PARAMS['attention_dropout'])
         
+        # 多尺度特征提取
+        self.multi_scale_conv = MultiScaleConv(feature_dim, self.d_model // 4)
+        
         # 输入特征映射
-        self.input_projection = nn.Linear(feature_dim, self.d_model)
+        self.input_projection = nn.Linear(self.d_model, self.d_model)
         self.pos_encoder = PositionalEncoding(self.d_model, self.dropout)
         
-        # 创建Transformer编码器层
-        encoder_layers = nn.TransformerEncoderLayer(
-            d_model=self.d_model,
-            nhead=self.n_heads,
-            dim_feedforward=self.d_ff,
-            dropout=self.dropout,
-            activation='gelu',  # 使用GELU激活函数
-            batch_first=True,
-            norm_first=True    # 使用Pre-LN结构
-        )
+        # 突发事件检测
+        self.event_attention = EventDetectionAttention(self.d_model)
         
-        # Transformer编码器
-        self.transformer_encoder = nn.TransformerEncoder(
-            encoder_layers,
-            num_layers=self.n_layers,
-            norm=nn.LayerNorm(self.d_model)
-        )
+        # 自适应注意力层
+        self.adaptive_attention = AdaptiveAttention(self.d_model, self.n_heads)
+        
+        # Transformer编码器层
+        encoder_layers = []
+        for _ in range(self.n_layers):
+            layer = nn.TransformerEncoderLayer(
+                d_model=self.d_model,
+                nhead=self.n_heads,
+                dim_feedforward=self.d_ff,
+                dropout=self.dropout,
+                activation='gelu',
+                batch_first=True,
+                norm_first=True
+            )
+            encoder_layers.append(layer)
+        
+        self.transformer_encoder = nn.ModuleList(encoder_layers)
+        self.norm = nn.LayerNorm(self.d_model)
         
         # 输出预测层
         self.output_layer = nn.Sequential(
@@ -141,14 +226,26 @@ class TimeSeriesTransformer(nn.Module):
         Returns:
             预测值和None（保持接口一致性）
         """
+        # 多尺度特征提取
+        x = self.multi_scale_conv(x)
+        
         # 特征映射
         x = self.input_projection(x)
         
         # 位置编码
         x = self.pos_encoder(x)
         
-        # Transformer编码器
-        x = self.transformer_encoder(x, src_mask)
+        # 突发事件检测
+        x = self.event_attention(x)
+        
+        # 自适应注意力
+        x = self.adaptive_attention(x)
+        
+        # Transformer编码器层
+        for layer in self.transformer_encoder:
+            x = layer(x, src_mask)
+        
+        x = self.norm(x)
         
         # 取序列最后一个时间步的特征进行预测
         x = x[:, -1, :]

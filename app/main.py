@@ -250,9 +250,9 @@ class StockPredictionApp:
             train_start_str = train_start.strftime('%Y-%m-%d')
             train_end_str = train_end.strftime('%Y-%m-%d')
             
-            df = get_stock_data(stock_code, train_start_str, train_end_str)
+            self.data = get_stock_data(stock_code, train_start_str, train_end_str)
             
-            if df.empty:
+            if self.data.empty:
                 self.update_status("错误：无法获取股票数据，请检查股票代码是否正确")
                 return
             
@@ -262,7 +262,7 @@ class StockPredictionApp:
             train_start_time = datetime.now()
             
             # 训练模型
-            trainer = ModelTrainer(df, self.progress)
+            trainer = ModelTrainer(self.data, self.progress)
             predictions, historical_predictions, metrics = trainer.train_all_models()
             
             # 记录训练结束时间
@@ -409,8 +409,8 @@ class StockPredictionApp:
                     model_info = MODEL_VERSIONS[model_name.replace('_historical', '')]
                     training_time = metric.get('training_time', 0)  # 获取训练时长，如果不存在则为0
                     
-                    # 计算训练集和对照集的大小
-                    total_days = (train_end - train_start).days
+                    # 计算实际的数据集大小
+                    total_days = len(self.data)  # 使用实际的数据长度
                     train_size = int(total_days * 0.8)  # 80%用于训练
                     validation_size = total_days - train_size  # 20%用于验证
                     
