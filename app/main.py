@@ -408,6 +408,12 @@ class StockPredictionApp:
                 if '_historical' in model_name:
                     model_info = MODEL_VERSIONS[model_name.replace('_historical', '')]
                     training_time = metric.get('training_time', 0)  # 获取训练时长，如果不存在则为0
+                    
+                    # 计算训练集和对照集的大小
+                    total_days = (train_end - train_start).days
+                    train_size = int(total_days * 0.8)  # 80%用于训练
+                    validation_size = total_days - train_size  # 20%用于验证
+                    
                     metrics_data.append({
                         '模型': model_name.replace('_historical', ''),
                         '版本': model_info['version'],
@@ -416,7 +422,12 @@ class StockPredictionApp:
                         'MAE': f"{metric['MAE']:.2f}",
                         '训练开始日期': train_start.strftime('%Y-%m-%d'),
                         '训练结束日期': train_end.strftime('%Y-%m-%d'),
-                        '训练时长(分钟)': f"{training_time:.2f}"
+                        '训练时长(分钟)': f"{training_time:.2f}",
+                        '总数据天数': total_days,
+                        '训练集天数': train_size,
+                        '对照集天数': validation_size,
+                        '训练集比例': '80%',
+                        '对照集比例': '20%'
                     })
             df_metrics = pd.DataFrame(metrics_data)
             
