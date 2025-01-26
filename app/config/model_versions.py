@@ -1,25 +1,36 @@
 MODEL_VERSIONS = {
     'LSTM': {
-        'version': 'V1.0',
+        'version': 'V2.0',
         'parameters': {
-            'units': 50,
+            'hidden_dim': 128,
+            'num_layers': 3,
             'dropout': 0.2,
+            'bidirectional': True,
             'epochs': 100,
             'batch_size': 32,
+            'learning_rate': 0.001,
             'optimizer': 'adam',
-            'loss': 'mse'
+            'patience': 15,
+            'reduce_lr_patience': 8,
+            'reduce_lr_factor': 0.5,
+            'min_lr': 1e-6
         }
     },
     'CNN': {
-        'version': 'V1.0',
+        'version': 'V2.0',
         'parameters': {
-            'filters': [64, 32, 16],
+            'filters': 64,
             'kernel_size': 3,
             'dropout': 0.2,
             'epochs': 100,
             'batch_size': 32,
+            'learning_rate': 0.001,
+            'patience': 15,
+            'reduce_lr_patience': 8,
+            'reduce_lr_factor': 0.5,
+            'min_lr': 1e-6,
             'optimizer': 'adam',
-            'loss': 'mse'
+            'loss': 'huber'
         }
     },
     'Transformer': {

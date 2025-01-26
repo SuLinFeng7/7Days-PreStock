@@ -9,11 +9,18 @@ PREDICTION_DAYS = 30  # 未来预测天数
 
 # 模型训练参数
 LSTM_PARAMS = {
-    'hidden_dim': 64, # 隐藏层维度
-    'num_layers': 3, # 层数
-    'epochs': 50, # 训练轮数
-    'batch_size': 32, # 批量大小
-    'learning_rate': 0.001 # 学习率
+    'hidden_dim': 128,        # 增加隐藏层维度
+    'num_layers': 3,          # 保持3层LSTM
+    'dropout': 0.2,           # 添加dropout参数
+    'bidirectional': True,    # 使用双向LSTM
+    'epochs': 100,            # 增加训练轮数
+    'batch_size': 32,         # 保持批次大小
+    'learning_rate': 0.001,   # 保持学习率
+    'optimizer': 'adam',      # 使用Adam优化器
+    'patience': 15,           # 早停耐心值
+    'reduce_lr_patience': 8,  # 学习率衰减耐心值
+    'reduce_lr_factor': 0.5,  # 学习率衰减因子
+    'min_lr': 1e-6           # 最小学习率
 }
 
 CNN_PARAMS = {

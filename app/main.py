@@ -250,9 +250,9 @@ class StockPredictionApp:
             train_start_str = train_start.strftime('%Y-%m-%d')
             train_end_str = train_end.strftime('%Y-%m-%d')
             
-            df = get_stock_data(stock_code, train_start_str, train_end_str)
+            self.data = get_stock_data(stock_code, train_start_str, train_end_str)
             
-            if df.empty:
+            if self.data.empty:
                 self.update_status("错误：无法获取股票数据，请检查股票代码是否正确")
                 return
             
@@ -262,7 +262,7 @@ class StockPredictionApp:
             train_start_time = datetime.now()
             
             # 训练模型
-            trainer = ModelTrainer(df, self.progress)
+            trainer = ModelTrainer(self.data, self.progress)
             predictions, historical_predictions, metrics = trainer.train_all_models()
             
             # 记录训练结束时间
@@ -374,6 +374,7 @@ class StockPredictionApp:
             mape_values = []
             rmse_values = []
             mae_values = []
+            training_times = []  # 添加训练时长列表
             
             for model_name, metric in metrics.items():
                 if '_historical' in model_name:
@@ -381,6 +382,8 @@ class StockPredictionApp:
                     mape_values.append(metric['MAPE'])
                     rmse_values.append(metric['RMSE'])
                     mae_values.append(metric['MAE'])
+                    if 'training_time' in metric:  # 添加训练时长
+                        training_times.append(metric['training_time'])
             
             x = np.arange(len(model_names))
             width = 0.25
@@ -404,6 +407,13 @@ class StockPredictionApp:
             for model_name, metric in metrics.items():
                 if '_historical' in model_name:
                     model_info = MODEL_VERSIONS[model_name.replace('_historical', '')]
+                    training_time = metric.get('training_time', 0)  # 获取训练时长，如果不存在则为0
+                    
+                    # 计算实际的数据集大小
+                    total_days = len(self.data)  # 使用实际的数据长度
+                    train_size = int(total_days * 0.8)  # 80%用于训练
+                    validation_size = total_days - train_size  # 20%用于验证
+                    
                     metrics_data.append({
                         '模型': model_name.replace('_historical', ''),
                         '版本': model_info['version'],
@@ -412,7 +422,12 @@ class StockPredictionApp:
                         'MAE': f"{metric['MAE']:.2f}",
                         '训练开始日期': train_start.strftime('%Y-%m-%d'),
                         '训练结束日期': train_end.strftime('%Y-%m-%d'),
-                        '训练时长(分钟)': f"{train_duration:.2f}"
+                        '训练时长(分钟)': f"{training_time:.2f}",
+                        '总数据天数': total_days,
+                        '训练集天数': train_size,
+                        '对照集天数': validation_size,
+                        '训练集比例': '80%',
+                        '对照集比例': '20%'
                     })
             df_metrics = pd.DataFrame(metrics_data)
             
