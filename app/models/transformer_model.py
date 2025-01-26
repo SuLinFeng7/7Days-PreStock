@@ -9,6 +9,7 @@ Transformer模型实现文件
 5. 使用Huber损失提高对异常值的鲁棒性
 6. 实现学习率预热和衰减策略
 7. 添加梯度裁剪防止梯度爆炸
+8. 支持动态参数调整
 """
 
 import sys
@@ -74,19 +75,36 @@ class TimeSeriesTransformer(nn.Module):
     Transformer模型主体
     使用Transformer编码器架构进行时间序列预测
     """
-    def __init__(self):
+    def __init__(self, params=None):
         super(TimeSeriesTransformer, self).__init__()
         
+        # 使用传入的参数或默认参数
+        if params is None:
+            params = TRANSFORMER_PARAMS
+        else:
+            # 合并默认参数和传入参数
+            default_params = TRANSFORMER_PARAMS.copy()
+            default_params.update(params)
+            params = default_params
+        
+        # 从参数中获取模型配置
+        self.d_model = params.get('d_model', TRANSFORMER_PARAMS['d_model'])
+        self.d_ff = params.get('d_ff', TRANSFORMER_PARAMS['d_ff'])
+        self.n_heads = params.get('n_heads', TRANSFORMER_PARAMS['n_heads'])
+        self.n_layers = params.get('num_layers', TRANSFORMER_PARAMS['num_layers'])
+        self.dropout = params.get('dropout', TRANSFORMER_PARAMS['dropout'])
+        self.attention_dropout = params.get('attention_dropout', TRANSFORMER_PARAMS['attention_dropout'])
+        
         # 输入特征映射
-        self.input_projection = nn.Linear(feature_dim, d_model)
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        self.input_projection = nn.Linear(feature_dim, self.d_model)
+        self.pos_encoder = PositionalEncoding(self.d_model, self.dropout)
         
         # 创建Transformer编码器层
         encoder_layers = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=n_heads,
-            dim_feedforward=d_ff,
-            dropout=dropout,
+            d_model=self.d_model,
+            nhead=self.n_heads,
+            dim_feedforward=self.d_ff,
+            dropout=self.dropout,
             activation='gelu',  # 使用GELU激活函数
             batch_first=True,
             norm_first=True    # 使用Pre-LN结构
@@ -95,16 +113,16 @@ class TimeSeriesTransformer(nn.Module):
         # Transformer编码器
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layers,
-            num_layers=n_layers,
-            norm=nn.LayerNorm(d_model)
+            num_layers=self.n_layers,
+            norm=nn.LayerNorm(self.d_model)
         )
         
         # 输出预测层
         self.output_layer = nn.Sequential(
-            nn.Linear(d_model, d_model // 2),
+            nn.Linear(self.d_model, self.d_model // 2),
             nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_model // 2, 1)
+            nn.Dropout(self.dropout),
+            nn.Linear(self.d_model // 2, 1)
         )
         
         # 初始化参数
@@ -158,10 +176,11 @@ def create_attention_mask(seq_len):
     return mask
 
 class WarmupCosineScheduler:
-    def __init__(self, optimizer, warmup_steps, total_steps):
+    def __init__(self, optimizer, warmup_steps, total_steps, learning_rate):
         self.optimizer = optimizer
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
+        self.learning_rate = learning_rate
         self.current_step = 0
 
     def step(self):
@@ -173,9 +192,9 @@ class WarmupCosineScheduler:
             lr_mult = max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
 
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = TRANSFORMER_PARAMS['learning_rate'] * lr_mult
+            param_group['lr'] = self.learning_rate * lr_mult
 
-def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=None):
+def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=None, **kwargs):
     """
     训练Transformer模型
     Args:
@@ -184,6 +203,7 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
         X_test: 测试数据特征
         y_test: 测试数据标签
         progress_callback: 训练进度回调函数
+        **kwargs: 额外的模型参数，用于动态调整模型
     Returns:
         预测结果、真实值和训练好的模型
     """
@@ -194,16 +214,23 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
         X_test = torch.FloatTensor(X_test)
         y_test = torch.FloatTensor(y_test)
         
+        # 获取训练参数
+        batch_size = kwargs.get('batch_size', TRANSFORMER_PARAMS['batch_size'])
+        epochs = kwargs.get('epochs', TRANSFORMER_PARAMS['epochs'])
+        learning_rate = kwargs.get('learning_rate', TRANSFORMER_PARAMS['learning_rate'])
+        weight_decay = kwargs.get('weight_decay', TRANSFORMER_PARAMS['weight_decay'])
+        warmup_steps = kwargs.get('warmup_steps', TRANSFORMER_PARAMS['warmup_steps'])
+        
         # 创建数据加载器
         train_dataset = TensorDataset(X_train, y_train)
         train_loader = DataLoader(
             train_dataset,
-            batch_size=TRANSFORMER_PARAMS['batch_size'],
+            batch_size=batch_size,
             shuffle=True
         )
         
         # 初始化模型
-        model = TimeSeriesTransformer()
+        model = TimeSeriesTransformer(kwargs)
         print(f"\n模型参数总量: {sum(p.numel() for p in model.parameters()):,}")
         
         # 使用Huber损失
@@ -212,16 +239,17 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
         # 使用AdamW优化器
         optimizer = optim.AdamW(
             model.parameters(),
-            lr=TRANSFORMER_PARAMS['learning_rate'],
-            weight_decay=TRANSFORMER_PARAMS['weight_decay']
+            lr=learning_rate,
+            weight_decay=weight_decay
         )
         
         # 创建学习率调度器
-        total_steps = len(train_loader) * TRANSFORMER_PARAMS['epochs']
+        total_steps = len(train_loader) * epochs
         scheduler = WarmupCosineScheduler(
             optimizer,
-            warmup_steps=TRANSFORMER_PARAMS['warmup_steps'],
-            total_steps=total_steps
+            warmup_steps=warmup_steps,
+            total_steps=total_steps,
+            learning_rate=learning_rate
         )
         
         # 创建注意力掩码
@@ -230,15 +258,17 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
         # 训练循环
         best_model = None
         best_loss = float('inf')
-        patience = 15
+        patience = kwargs.get('patience', 15)
         no_improve = 0
         
         print("\n开始训练循环...")
-        print(f"总训练轮数: {TRANSFORMER_PARAMS['epochs']}")
-        print(f"批次大小: {TRANSFORMER_PARAMS['batch_size']}")
-        print(f"学习率: {TRANSFORMER_PARAMS['learning_rate']}")
+        print(f"总训练轮数: {epochs}")
+        print(f"批次大小: {batch_size}")
+        print(f"学习率: {learning_rate}")
+        print(f"注意力头数: {kwargs.get('n_heads', TRANSFORMER_PARAMS['n_heads'])}")
+        print(f"Dropout率: {kwargs.get('dropout', TRANSFORMER_PARAMS['dropout'])}")
         
-        for epoch in range(TRANSFORMER_PARAMS['epochs']):
+        for epoch in range(epochs):
             model.train()
             total_loss = 0
             batch_count = 0
@@ -250,27 +280,25 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
                 loss = criterion(outputs, batch_y)
                 
                 loss.backward()
-                
-                # 梯度裁剪
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(),
-                    TRANSFORMER_PARAMS['clip_grad_norm']
-                )
-                
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # 梯度裁剪
                 optimizer.step()
                 scheduler.step()
                 
                 total_loss += loss.item()
                 batch_count += 1
             
-            # 计算平均训练损失
-            avg_train_loss = total_loss / batch_count
+            # 计算平均损失
+            avg_loss = total_loss / batch_count
             
-            # 验证
+            # 验证阶段
             model.eval()
             with torch.no_grad():
                 val_outputs, _ = model(X_test, src_mask)
                 val_loss = criterion(val_outputs, y_test)
+            
+            # 更新进度
+            if progress_callback:
+                progress_callback(epoch + 1, epochs, avg_loss, val_loss.item())
             
             # 早停检查
             if val_loss < best_loss:
@@ -279,24 +307,20 @@ def train_transformer_model(X_train, y_train, X_test, y_test, progress_callback=
                 no_improve = 0
             else:
                 no_improve += 1
-            
-            if progress_callback:
-                progress_callback(epoch + 1, TRANSFORMER_PARAMS['epochs'], avg_train_loss, val_loss)
-            
-            if no_improve >= patience:
-                print(f"\n早停：在epoch {epoch + 1}")
-                break
+                if no_improve >= patience:
+                    print(f"\n早停：验证损失在{patience}轮内没有改善")
+                    break
         
         # 加载最佳模型
-        model.load_state_dict(best_model)
-        model.eval()
+        if best_model is not None:
+            model.load_state_dict(best_model)
         
-        # 生成预测
+        # 生成预测结果
+        model.eval()
         with torch.no_grad():
             y_pred, _ = model(X_test, src_mask)
-            y_pred = y_pred.view(-1, 1)
         
-        return y_pred.numpy(), y_test.view(-1, 1).numpy(), model
+        return y_pred.numpy().reshape(-1, 1), y_test.numpy().reshape(-1, 1), model
         
     except Exception as e:
         print(f"训练过程中发生错误: {str(e)}")
