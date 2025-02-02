@@ -290,6 +290,11 @@ def train_lstm_model(X_train, y_train, X_test, y_test, progress_callback=None, *
         # 预测
         y_pred = model.predict(X_test)
         
+        # 确保预测结果和真实值长度一致
+        min_len = min(len(y_test), len(y_pred))
+        y_pred = y_pred[:min_len]
+        y_test = y_test[:min_len]
+        
         # 后处理：使用移动平均平滑预测结果
         window_size = 3
         y_pred_smoothed = np.convolve(y_pred.flatten(), 
@@ -298,6 +303,9 @@ def train_lstm_model(X_train, y_train, X_test, y_test, progress_callback=None, *
         # 补齐长度
         padding = np.repeat(y_pred_smoothed[0], (window_size-1)//2)
         y_pred_smoothed = np.concatenate([padding, y_pred_smoothed])
+        
+        # 确保最终长度一致
+        y_pred_smoothed = y_pred_smoothed[:len(y_test)]
         
         # 检查预测结果
         if np.any(np.isnan(y_pred_smoothed)):

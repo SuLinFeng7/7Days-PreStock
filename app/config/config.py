@@ -24,12 +24,18 @@ LSTM_PARAMS = {
 }
 
 CNN_PARAMS = {
-    'epochs': 200, # 训练轮数
-    'batch_size': 32, # 批量大小
-    'early_stopping_patience': 30, # 早停步数
-    'reduce_lr_patience': 10, # 学习率减少步数
-    'reduce_lr_factor': 0.5, # 学习率减少因子
-    'min_lr': 1e-6 # 最小学习率
+    'filters': 128,           # 第一层卷积 filters 增加到 128
+    'kernel_size': 3,         # 卷积核大小保持不变
+    'dropout': 0.3,           # Dropout 率增加到 0.3
+    'epochs': 200,            # 训练轮数
+    'batch_size': 32,         # 批量大小
+    'learning_rate': 0.001,   # 学习率
+    'patience': 15,           # 早停耐心值
+    'reduce_lr_patience': 8,  # 学习率衰减耐心值
+    'reduce_lr_factor': 0.5,  # 学习率衰减因子
+    'min_lr': 1e-6,           # 最小学习率
+    'optimizer': 'adamw',     # 使用 AdamW 优化器
+    'loss': 'huber'           # 使用 Huber 损失函数
 }
 
 TRANSFORMER_PARAMS = {

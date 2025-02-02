@@ -29,20 +29,25 @@ class StockPredictionApp:
     def __init__(self):
         self.root = ThemedTk(theme="arc")  # 使用现代化主题
         self.root.title("智能股票预测系统")
-        self.root.geometry("1200x800")  # 增加窗口大小
+        self.root.geometry("1080x720")  # 增加窗口大小
         
-        # 添加默认股票列表
+        # 添加默认股票列表和对应的中文名称映射
+        self.stock_names = {
+            "600104.SH": "上汽集团",
+            "002594.SZ": "比亚迪",
+            "601127.SH": "赛力斯",
+            "600006.SH": "长城汽车", 
+            "601633.SH": "广汽集团",
+            "300750.SZ": "宁德时代",
+            "TSLA": "特斯拉",
+            "LI": "理想汽车",
+            "NIO": "蔚来汽车",
+            "XPEV": "小鹏汽车"
+        }
+        
+        # 修改默认股票列表的格式为"代码 - 名称"
         self.default_stocks = [
-            "600104.SH",  # 上汽集团
-            "002594.SZ",  # 比亚迪
-            "601127.SH",  # 赛力斯
-            "600006.SH",  # 长城汽车
-            "601633.SH",  # 广汽集团 
-            "300750.SZ",  # 宁德时代
-            "TSLA",        # 特斯拉
-            "LI",          # 理想汽车
-            "NIO",         # 蔚来汽车
-            "XPEV"         # 小鹏汽车
+            f"{code} - {name}" for code, name in self.stock_names.items()
         ]
         
         # 设置整体样式
@@ -87,10 +92,13 @@ class StockPredictionApp:
             stock_frame,
             values=self.default_stocks,
             font=('Microsoft YaHei UI', 10),
-            width=15
+            width=25  # 增加宽度以适应更长的显示文本
         )
         self.stock_id.set(self.default_stocks[0])  # 设置默认值
         self.stock_id.pack(side=tk.LEFT, padx=10)
+        
+        # 绑定选择事件
+        self.stock_id.bind('<<ComboboxSelected>>', self.on_stock_select)
         
         # 允许手动输入
         self.stock_id.configure(state='normal')
@@ -203,6 +211,20 @@ class StockPredictionApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.result_text.configure(yscrollcommand=scrollbar.set)
 
+    def on_stock_select(self, event=None):
+        """处理股票选择事件"""
+        selected = self.stock_id.get()
+        if selected:
+            # 如果是手动输入的代码，检查是否在映射中
+            if selected in self.stock_names:
+                self.stock_id.set(f"{selected} - {self.stock_names[selected]}")
+            elif " - " in selected:
+                # 已经是格式化的显示，不需要处理
+                pass
+            else:
+                # 未知的股票代码，保持原样
+                pass
+
     def validate_dates(self):
         """验证日期选择是否合法"""
         start = self.start_date.get_date()
@@ -231,7 +253,10 @@ class StockPredictionApp:
         if not self.validate_dates():
             return
             
-        stock_code = self.stock_id.get()
+        # 从显示文本中提取股票代码
+        stock_display = self.stock_id.get()
+        stock_code = stock_display.split(" - ")[0] if " - " in stock_display else stock_display
+        
         start_date = self.start_date.get_date()
         end_date = self.end_date.get_date()
         
@@ -289,12 +314,15 @@ class StockPredictionApp:
     def show_results(self, predictions, historical_predictions, metrics, start_date, end_date, train_start, train_end, train_duration):
         """显示预测结果"""
         try:
-            # 获取股票代码和日期信息用于文件命名
-            stock_code = self.stock_id.get()
-            date_str = end_date.strftime('%Y%m%d')
+            # 从显示文本中提取股票代码
+            stock_display = self.stock_id.get()
+            stock_code = stock_display.split(" - ")[0] if " - " in stock_display else stock_display
+            
+            # 获取股票名称
+            stock_name = self.stock_names.get(stock_code, "")
             
             # 创建记录目录结构
-            record_dir = f"record/{stock_code}_{date_str}"
+            record_dir = f"record/{stock_code}_{end_date.strftime('%Y%m%d')}"
             os.makedirs(record_dir, exist_ok=True)
             os.makedirs(f"{record_dir}/images", exist_ok=True)
             
@@ -315,7 +343,8 @@ class StockPredictionApp:
             hist_ax.plot(next(iter(historical_predictions.values()))['actual'], 
                         label="实际值", linewidth=2, color='black')
             
-            hist_ax.set_title("最近两年预测对比", fontproperties='SimHei', fontsize=12)
+            hist_ax.set_title(f"{stock_code} {stock_name} - 最近两年预测对比", 
+                            fontproperties='SimHei', fontsize=12)
             hist_ax.set_xlabel("时间", fontproperties='SimHei')
             hist_ax.set_ylabel("股价", fontproperties='SimHei')
             hist_ax.legend(prop={'family': 'SimHei'})
@@ -339,7 +368,8 @@ class StockPredictionApp:
                               label=f'{model_display_name}预测', 
                               marker='o')
             
-            future_ax.set_title("未来预测趋势", fontproperties='SimHei', fontsize=12)
+            future_ax.set_title(f"{stock_code} {stock_name} - 未来预测趋势", 
+                              fontproperties='SimHei', fontsize=12)
             future_ax.set_xlabel("预测日期", fontproperties='SimHei')
             future_ax.set_ylabel("预测价格", fontproperties='SimHei')
             future_ax.legend(prop={'family': 'SimHei'})
