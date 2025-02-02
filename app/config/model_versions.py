@@ -17,19 +17,19 @@ MODEL_VERSIONS = {
         }
     },
     'CNN': {
-        'version': 'V2.0',
+        'version': 'V2.1',
         'parameters': {
-            'filters': 64,
+            'filters': 128,
             'kernel_size': 3,
-            'dropout': 0.2,
-            'epochs': 100,
+            'dropout': 0.3,
+            'epochs': 200,
             'batch_size': 32,
             'learning_rate': 0.001,
             'patience': 15,
             'reduce_lr_patience': 8,
             'reduce_lr_factor': 0.5,
             'min_lr': 1e-6,
-            'optimizer': 'adam',
+            'optimizer': 'adamw',
             'loss': 'huber'
         }
     },

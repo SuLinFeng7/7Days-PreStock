@@ -32,47 +32,27 @@ def create_cnn_model(input_shape, params=None):
     
     model = Sequential([
         # 第一个卷积块
-        Conv1D(
-            filters=params.get('filters', 64), 
-            kernel_size=3, 
-            activation='relu', 
-            padding='same', 
-            input_shape=input_shape
-        ),
-        BatchNormalization(),  # 批归一化层，加速训练并提高稳定性
-        MaxPooling1D(pool_size=2),  # 最大池化，减少序列长度并保留重要特征
+        Conv1D(128, 3, activation='relu', padding='same', input_shape=input_shape),
+        BatchNormalization(),
+        MaxPooling1D(2),
         
         # 第二个卷积块
-        Conv1D(
-            filters=params.get('filters', 64) // 2, 
-            kernel_size=3, 
-            activation='relu', 
-            padding='same'
-        ),
+        Conv1D(64, 3, activation='relu', padding='same'),
         BatchNormalization(),
-        MaxPooling1D(pool_size=2),
+        MaxPooling1D(2),
         
         # 第三个卷积块
-        Conv1D(
-            filters=params.get('filters', 64) // 4, 
-            kernel_size=3, 
-            activation='relu', 
-            padding='same'
-        ),
-        BatchNormalization(),
-        GlobalAveragePooling1D(),  # 全局平均池化，自适应处理不同长度的序列
+        Conv1D(32, 3, activation='relu', padding='same'),
+        GlobalAveragePooling1D(),
         
         # 全连接层
-        Dense(params.get('filters', 64) // 2, activation='relu'),
-        BatchNormalization(),
-        Dropout(params.get('dropout', 0.2)),  # dropout防止过拟合
+        Dense(64, activation='relu'),
+        Dropout(0.3),
         Dense(1)  # 输出层，用于回归预测
     ])
     
     # 配置优化器和损失函数
-    optimizer = tf.keras.optimizers.Adam(
-        learning_rate=params.get('learning_rate', 0.001)
-    )
+    optimizer = tf.keras.optimizers.AdamW(learning_rate=0.001, weight_decay=0.01)
     model.compile(
         optimizer=optimizer, 
         loss='huber',  # 使用Huber损失函数，对异常值更鲁棒
