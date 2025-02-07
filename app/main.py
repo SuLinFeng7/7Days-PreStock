@@ -14,7 +14,7 @@ import pandas as pd
 from data.data_preprocessing import get_stock_data
 from models.model_trainer import ModelTrainer
 from utils.visualization import create_prediction_chart, create_metrics_table, create_historical_comparison_chart
-from utils.record_keeper import RecordKeeper
+# from utils.record_keeper import RecordKeeper
 import numpy as np
 from ttkthemes import ThemedTk  # 新增主题支持
 from config.model_versions import MODEL_VERSIONS  # 添加模型版本配置导入
@@ -62,7 +62,7 @@ class StockPredictionApp:
         # 设置默认预测天数
         self.default_prediction_days = 30
         
-        self.record_keeper = RecordKeeper()
+        # self.record_keeper = RecordKeeper()
         self.create_widgets()
         
     def create_widgets(self):
