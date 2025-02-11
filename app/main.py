@@ -14,7 +14,7 @@ import pandas as pd
 from data.data_preprocessing import get_stock_data
 from models.model_trainer import ModelTrainer
 from utils.visualization import create_prediction_chart, create_metrics_table, create_historical_comparison_chart
-from utils.record_keeper import RecordKeeper
+# from utils.record_keeper import RecordKeeper
 import numpy as np
 from ttkthemes import ThemedTk  # 新增主题支持
 from config.model_versions import MODEL_VERSIONS  # 添加模型版本配置导入
@@ -62,7 +62,7 @@ class StockPredictionApp:
         # 设置默认预测天数
         self.default_prediction_days = 30
         
-        self.record_keeper = RecordKeeper()
+        # self.record_keeper = RecordKeeper()
         self.create_widgets()
         
     def create_widgets(self):
@@ -183,6 +183,15 @@ class StockPredictionApp:
             style='Custom.TButton'
         )
         start_button.pack(pady=10)
+        
+        # 添加“全部预测”按钮
+        all_predict_button = ttk.Button(
+            button_frame,
+            text="全部预测",
+            command=self.predict_all_stocks,  # 绑定到新的处理函数
+            style='Custom.TButton'
+        )
+        all_predict_button.pack(pady=10)
         
         # 右侧面板 - 结果显示区域
         right_panel = ttk.Frame(main_container, style='Custom.TFrame')
@@ -658,6 +667,23 @@ class StockPredictionApp:
             'start_date': self.start_date.get_date(),
             'end_date': self.end_date.get_date()
         }
+
+    def predict_all_stocks(self):
+        """预测默认股票列表中的所有股票"""
+        for stock_display in self.default_stocks:
+            stock_code = stock_display.split(" - ")[0]  # 提取股票代码
+            self.stock_id.set(stock_display)  # 设置当前股票
+            self.update_status(f"开始预测股票: {stock_code}")
+            
+            # 设置默认的日期范围
+            start_date = datetime.now().date()
+            end_date = start_date + timedelta(days=self.default_prediction_days)
+            self.start_date.set_date(start_date)
+            self.end_date.set_date(end_date)
+            
+            # 调用现有的预测方法
+            self.start_prediction()
+            self.update_status(f"完成预测股票: {stock_code}")
 
 if __name__ == "__main__":
     app = StockPredictionApp()
