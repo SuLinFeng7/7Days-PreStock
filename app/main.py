@@ -1,5 +1,7 @@
 import sys
 import os
+import shutil
+from PIL import Image, ImageTk
 
 # 添加项目根目录到Python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,11 +29,36 @@ plt.rcParams['axes.unicode_minus'] = False     # 用来正常显示负号
 
 class StockPredictionApp:
     def __init__(self):
-        self.root = ThemedTk(theme="arc")  # 使用现代化主题
+        self.root = ThemedTk(theme="arc")
         self.root.title("智能股票预测系统")
-        self.root.geometry("1080x720")  # 增加窗口大小
+        self.root.geometry("1080x720")
         
-        # 添加默认股票列表和对应的中文名称映射
+        # 创建并配置全局样式
+        self.style = ttk.Style()
+        self.style.configure(
+            'Custom.TButton',
+            padding=5,
+            font=('微软雅黑', 10)
+        )
+        
+        # 配置标签框架样式
+        self.style.configure(
+            'Custom.TLabelframe',
+            background='white',
+            relief='solid'
+        )
+        self.style.configure(
+            'Custom.TLabelframe.Label',
+            font=('微软雅黑', 10, 'bold'),
+            background='white'
+        )
+        
+        # 配置其他基础样式
+        self.style.configure('Custom.TFrame', background='#f0f0f0')
+        self.style.configure('Custom.TLabel', font=('微软雅黑', 10))
+        self.style.configure('Title.TLabel', font=('微软雅黑', 16, 'bold'))
+        
+        # 初始化其他属性
         self.stock_names = {
             "600104.SH": "上汽集团",
             "002594.SZ": "比亚迪",
@@ -45,180 +72,232 @@ class StockPredictionApp:
             "XPEV": "小鹏汽车"
         }
         
-        # 修改默认股票列表的格式为"代码 - 名称"
-        self.default_stocks = [
-            f"{code} - {name}" for code, name in self.stock_names.items()
-        ]
-        
-        # 设置整体样式
-        self.style = ttk.Style()
-        self.style.configure('Custom.TFrame', background='#f0f0f0')
-        self.style.configure('Custom.TLabel', background='#f0f0f0', font=('Microsoft YaHei UI', 10))
-        self.style.configure('Title.TLabel', font=('Microsoft YaHei UI', 16, 'bold'))
-        self.style.configure('Custom.TButton', font=('Microsoft YaHei UI', 10))
-        
-        # 设置默认训练年限
+        self.default_stocks = [f"{code} - {name}" for code, name in self.stock_names.items()]
         self.default_train_years = 10
-        # 设置默认预测天数
         self.default_prediction_days = 30
+        self.default_compare_start_year = 2020
+        self.default_compare_end_year = datetime.now().year
         
-        # self.record_keeper = RecordKeeper()
+        # 添加进度条属性
+        self.progress = None
+        
         self.create_widgets()
         
     def create_widgets(self):
-        # 主容器
-        main_container = ttk.Frame(self.root, style='Custom.TFrame')
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        # 创建主容器，使用网格布局
+        main_container = ttk.Frame(self.root, style='Custom.TFrame', padding="10")
+        main_container.pack(fill=tk.BOTH, expand=True)
         
-        # 左侧面板 - 输入区域
+        # 创建左右分栏
         left_panel = ttk.Frame(main_container, style='Custom.TFrame')
-        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=10, pady=10)
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 10))
         
-        # 标题
-        title_label = ttk.Label(
-            left_panel, 
-            text="股票预测配置", 
-            style='Title.TLabel'
+        right_panel = ttk.Frame(main_container, style='Custom.TFrame')
+        right_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # === 左侧面板内容 ===
+        # 预测配置区域
+        config_frame = ttk.LabelFrame(
+            left_panel,
+            text="预测配置",
+            style='Custom.TLabelframe',
+            padding="10"
         )
-        title_label.pack(pady=(0, 20))
+        config_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # 股票代码输入框和下拉框组合
-        stock_frame = ttk.Frame(left_panel, style='Custom.TFrame')
-        stock_frame.pack(fill=tk.X, pady=10)
+        # 股票选择
+        stock_frame = ttk.Frame(config_frame)
+        stock_frame.pack(fill=tk.X, pady=5)
         ttk.Label(stock_frame, text="股票代码:", style='Custom.TLabel').pack(side=tk.LEFT)
-        
-        # 创建组合框
         self.stock_id = ttk.Combobox(
             stock_frame,
             values=self.default_stocks,
-            font=('Microsoft YaHei UI', 10),
-            width=25  # 增加宽度以适应更长的显示文本
+            width=25,
+            state='readonly'
         )
-        self.stock_id.set(self.default_stocks[0])  # 设置默认值
-        self.stock_id.pack(side=tk.LEFT, padx=10)
+        self.stock_id.set(self.default_stocks[0])
+        self.stock_id.pack(side=tk.LEFT, padx=5)
         
-        # 绑定选择事件
-        self.stock_id.bind('<<ComboboxSelected>>', self.on_stock_select)
-        
-        # 允许手动输入
-        self.stock_id.configure(state='normal')
-        
-        # 训练年限选择
-        year_frame = ttk.Frame(left_panel, style='Custom.TFrame')
-        year_frame.pack(fill=tk.X, pady=10)
+        # 训练年限选择（用于预测）
+        year_frame = ttk.Frame(config_frame)
+        year_frame.pack(fill=tk.X, pady=5)
         ttk.Label(year_frame, text="训练年限:", style='Custom.TLabel').pack(side=tk.LEFT)
-        self.year_var = tk.StringVar(value=str(self.default_train_years))
-        year_choices = [str(i) for i in range(1, 11)]
-        year_menu = ttk.Combobox(
+        self.train_year_var = ttk.Combobox(
             year_frame,
-            textvariable=self.year_var,
-            values=year_choices,
+            values=[str(i) for i in range(1, 11)],
             width=5,
-            state="readonly",
-            font=('Microsoft YaHei UI', 10)
+            state='readonly'
         )
-        year_menu.pack(side=tk.LEFT, padx=10)
-        ttk.Label(year_frame, text="年", style='Custom.TLabel').pack(side=tk.LEFT)
+        self.train_year_var.set(str(self.default_train_years))
+        self.train_year_var.pack(side=tk.LEFT, padx=5)
         
-        # 日期选择区域
-        date_frame = ttk.LabelFrame(
-            left_panel, 
-            text="预测时间范围",
-            style='Custom.TFrame'
-        )
-        date_frame.pack(fill=tk.X, pady=20)
+        # 添加预测日期选择
+        date_frame = ttk.Frame(config_frame)
+        date_frame.pack(fill=tk.X, pady=5)
         
-        # 开始日期
-        start_date_frame = ttk.Frame(date_frame, style='Custom.TFrame')
-        start_date_frame.pack(fill=tk.X, pady=10, padx=10)
-        ttk.Label(start_date_frame, text="开始日期:", style='Custom.TLabel').pack(side=tk.LEFT)
+        # 开始日期选择
+        ttk.Label(date_frame, text="预测开始日期:", style='Custom.TLabel').pack(side=tk.LEFT)
         self.start_date = DateEntry(
-            start_date_frame,
+            date_frame,
             width=12,
             background='darkblue',
             foreground='white',
             borderwidth=2,
             date_pattern='yyyy-mm-dd'
         )
-        self.start_date.pack(side=tk.LEFT, padx=10)
+        self.start_date.pack(side=tk.LEFT, padx=5)
         
-        # 结束日期
-        end_date_frame = ttk.Frame(date_frame, style='Custom.TFrame')
-        end_date_frame.pack(fill=tk.X, pady=10, padx=10)
-        ttk.Label(end_date_frame, text="结束日期:", style='Custom.TLabel').pack(side=tk.LEFT)
-        
-        # 设置默认结束日期为30天后
-        default_end_date = datetime.now() + timedelta(days=self.default_prediction_days)
+        # 结束日期选择
+        ttk.Label(date_frame, text="预测结束日期:", style='Custom.TLabel').pack(side=tk.LEFT, padx=(10, 0))
         self.end_date = DateEntry(
-            end_date_frame,
+            date_frame,
             width=12,
             background='darkblue',
             foreground='white',
             borderwidth=2,
-            date_pattern='yyyy-mm-dd',
-            year=default_end_date.year,
-            month=default_end_date.month,
-            day=default_end_date.day
+            date_pattern='yyyy-mm-dd'
         )
-        self.end_date.pack(side=tk.LEFT, padx=10)
+        self.end_date.pack(side=tk.LEFT, padx=5)
         
-        # 进度条
-        progress_frame = ttk.Frame(left_panel, style='Custom.TFrame')
-        progress_frame.pack(fill=tk.X, pady=20)
+        # 设置默认日期
+        default_start = datetime.now()
+        default_end = default_start + timedelta(days=self.default_prediction_days)
+        self.start_date.set_date(default_start)
+        self.end_date.set_date(default_end)
+        
+        # 添加进度条
+        progress_frame = ttk.Frame(config_frame)
+        progress_frame.pack(fill=tk.X, pady=5)
         self.progress = ttk.Progressbar(
             progress_frame,
-            length=300,
             mode='determinate',
-            style='Custom.Horizontal.TProgressbar'
+            length=200
         )
-        self.progress.pack()
+        self.progress.pack(fill=tk.X)
         
-        # 开始预测按钮
-        button_frame = ttk.Frame(left_panel, style='Custom.TFrame')
-        button_frame.pack(fill=tk.X, pady=20)
+        # 在config_frame中添加预测按钮
+        predict_button_frame = ttk.Frame(config_frame)
+        predict_button_frame.pack(fill=tk.X, pady=10)
+        
+        # 添加"开始预测"按钮
         start_button = ttk.Button(
-            button_frame,
+            predict_button_frame,
             text="开始预测",
             command=self.start_prediction,
             style='Custom.TButton'
         )
-        start_button.pack(pady=10)
+        start_button.pack(side=tk.LEFT, padx=5)
         
-        # 添加“全部预测”按钮
+        # 添加"全部预测"按钮
         all_predict_button = ttk.Button(
-            button_frame,
+            predict_button_frame,
             text="全部预测",
-            command=self.predict_all_stocks,  # 绑定到新的处理函数
+            command=self.predict_all_stocks,
             style='Custom.TButton'
         )
-        all_predict_button.pack(pady=10)
+        all_predict_button.pack(side=tk.LEFT)
         
-        # 右侧面板 - 结果显示区域
-        right_panel = ttk.Frame(main_container, style='Custom.TFrame')
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # === 趋势对比区域 ===
+        compare_frame = ttk.LabelFrame(
+            left_panel,
+            text="股票趋势对比",
+            style='Custom.TLabelframe',
+            padding="10"
+        )
+        compare_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 状态信息显示区域
+        # 股票多选列表
+        list_frame = ttk.Frame(compare_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        ttk.Label(list_frame, text="选择要对比的股票:", style='Custom.TLabel').pack(anchor=tk.W)
+        
+        # 列表框和滚动条
+        list_container = ttk.Frame(list_frame)
+        list_container.pack(fill=tk.BOTH, expand=True)
+        
+        self.stock_listbox = tk.Listbox(
+            list_container,
+            selectmode=tk.MULTIPLE,
+            font=('微软雅黑', 10),
+            exportselection=False
+        )
+        scrollbar = ttk.Scrollbar(list_container, orient=tk.VERTICAL, command=self.stock_listbox.yview)
+        
+        self.stock_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.stock_listbox.configure(yscrollcommand=scrollbar.set)
+        
+        # 添加股票到列表
+        for stock_code, stock_name in self.stock_names.items():
+            self.stock_listbox.insert(tk.END, f"{stock_code} - {stock_name}")
+        
+        # 趋势对比的年份选择（用于对比图）
+        year_select_frame = ttk.Frame(compare_frame)
+        year_select_frame.pack(fill=tk.X, pady=5)
+        
+        # 起始年份
+        ttk.Label(year_select_frame, text="起始年份:", style='Custom.TLabel').pack(side=tk.LEFT)
+        self.compare_start_year = ttk.Spinbox(
+            year_select_frame,
+            from_=2010,
+            to=datetime.now().year,
+            width=6,
+            state='readonly'
+        )
+        self.compare_start_year.pack(side=tk.LEFT, padx=5)
+        self.compare_start_year.set(str(self.default_compare_start_year))
+        
+        ttk.Label(year_select_frame, text="结束年份:", style='Custom.TLabel').pack(side=tk.LEFT, padx=(10, 0))
+        self.compare_end_year = ttk.Spinbox(
+            year_select_frame,
+            from_=2010,
+            to=datetime.now().year + 1,
+            width=6,
+            state='readonly'
+        )
+        self.compare_end_year.pack(side=tk.LEFT, padx=5)
+        self.compare_end_year.set(str(self.default_compare_end_year))
+        
+        # 按钮区域
+        button_frame = ttk.Frame(compare_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.compare_button = ttk.Button(
+            button_frame,
+            text="生成趋势对比图",
+            command=self.generate_comparison_chart,
+            style='Custom.TButton'
+        )
+        self.compare_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.save_button = ttk.Button(
+            button_frame,
+            text="保存对比图",
+            command=self.save_comparison_chart,
+            state=tk.DISABLED,
+            style='Custom.TButton'
+        )
+        self.save_button.pack(side=tk.LEFT)
+        
+        # === 右侧面板内容 ===
+        # 状态显示区域
         status_frame = ttk.LabelFrame(
             right_panel,
             text="运行状态",
-            style='Custom.TFrame'
+            style='Custom.TLabelframe',
+            padding="10"
         )
         status_frame.pack(fill=tk.BOTH, expand=True)
         
+        # 状态文本框
         self.result_text = tk.Text(
             status_frame,
-            height=10,
+            height=20,
             width=50,
-            font=('Microsoft YaHei UI', 10),
-            wrap=tk.WORD,
-            bg='#ffffff'
+            font=('微软雅黑', 10)
         )
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # 添加滚动条
-        scrollbar = ttk.Scrollbar(status_frame, orient="vertical", command=self.result_text.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.result_text.configure(yscrollcommand=scrollbar.set)
+        self.result_text.pack(fill=tk.BOTH, expand=True)
 
     def on_stock_select(self, event=None):
         """处理股票选择事件"""
@@ -235,90 +314,88 @@ class StockPredictionApp:
                 pass
 
     def validate_dates(self):
-        """验证日期选择是否合法"""
-        start = self.start_date.get_date()
-        end = self.end_date.get_date()
-        today = datetime.now().date()
-        
-        if start < today:
-            messagebox.showerror("错误", "开始日期必须从今天开始")
-            return False
+        """验证日期选择是否有效"""
+        try:
+            start = self.start_date.get_date()
+            end = self.end_date.get_date()
             
-        if end < start:
-            messagebox.showerror("错误", "结束日期必须大于开始日期")
-            return False
+            if start >= end:
+                messagebox.showwarning("警告", "开始日期必须早于结束日期")
+                return False
             
-        if start == end:
-            messagebox.showerror("错误", "开始日期和结束日期不能是同一天")
+            return True
+        except Exception as e:
+            messagebox.showerror("错误", f"日期验证失败: {str(e)}")
             return False
-            
-        if (end - start).days > self.default_prediction_days:
-            messagebox.showerror("错误", f"预测期间不能超过{self.default_prediction_days}天")
-            return False
-            
-        return True
         
     def start_prediction(self):
-        if not self.validate_dates():
-            return
-            
-        # 从显示文本中提取股票代码
-        stock_display = self.stock_id.get()
-        stock_code = stock_display.split(" - ")[0] if " - " in stock_display else stock_display
-        
-        start_date = self.start_date.get_date()
-        end_date = self.end_date.get_date()
-        
-        # 获取选择的训练年限
-        train_years = int(self.year_var.get())
-        self.update_status(f"开始获取股票 {stock_code} 的历史数据...")
-        
+        """开始预测"""
         try:
-            # 修改训练数据的时间范围
-            train_end = datetime.now().date()
-            train_start = train_end - timedelta(days=365*train_years)
-            
-            self.update_status(f"正在获取从 {train_start} 到 {train_end} 的历史数据（{train_years}年）...")
-            
-            # 格式化日期为YYYY-MM-DD格式
-            train_start_str = train_start.strftime('%Y-%m-%d')
-            train_end_str = train_end.strftime('%Y-%m-%d')
-            
-            self.data = get_stock_data(stock_code, train_start_str, train_end_str)
-            
-            if self.data.empty:
-                self.update_status("错误：无法获取股票数据，请检查股票代码是否正确")
+            if not self.validate_dates():
                 return
             
-            self.update_status("数据获取成功，开始训练模型...")
+            # 获取当前选择的股票代码
+            stock_display = self.stock_id.get()
+            stock_code = stock_display.split(" - ")[0]
             
-            # 记录训练开始时间
-            train_start_time = datetime.now()
+            # 获取训练年限
+            train_years = int(self.train_year_var.get())
             
-            # 训练模型
-            trainer = ModelTrainer(self.data, self.progress)
-            predictions, historical_predictions, metrics = trainer.train_all_models()
+            # 获取预测日期范围
+            start_date = self.start_date.get_date()
+            end_date = self.end_date.get_date()
             
-            # 记录训练结束时间
-            train_end_time = datetime.now()
-            train_duration = (train_end_time - train_start_time).total_seconds() / 60  # 转换为分钟
+            self.update_status(f"开始获取股票 {stock_code} 的历史数据...")
             
-            self.update_status("模型训练完成，正在生成预测结果...")
-            
-            # 显示结果
-            self.show_results(
-                predictions, 
-                historical_predictions,  # 添加历史预测数据
-                metrics, 
-                start_date, 
-                end_date, 
-                train_start, 
-                train_end, 
-                train_duration
-            )
+            try:
+                # 修改训练数据的时间范围
+                train_end = datetime.now().date()
+                train_start = train_end - timedelta(days=365*train_years)
+                
+                self.update_status(f"正在获取从 {train_start} 到 {train_end} 的历史数据（{train_years}年）...")
+                
+                # 格式化日期为YYYY-MM-DD格式
+                train_start_str = train_start.strftime('%Y-%m-%d')
+                train_end_str = train_end.strftime('%Y-%m-%d')
+                
+                self.data = get_stock_data(stock_code, train_start_str, train_end_str)
+                
+                if self.data.empty:
+                    self.update_status("错误：无法获取股票数据，请检查股票代码是否正确")
+                    return
+                
+                self.update_status("数据获取成功，开始训练模型...")
+                
+                # 记录训练开始时间
+                train_start_time = datetime.now()
+                
+                # 训练模型
+                trainer = ModelTrainer(self.data, self.progress)
+                predictions, historical_predictions, metrics = trainer.train_all_models()
+                
+                # 记录训练结束时间
+                train_end_time = datetime.now()
+                train_duration = (train_end_time - train_start_time).total_seconds() / 60  # 转换为分钟
+                
+                self.update_status("模型训练完成，正在生成预测结果...")
+                
+                # 显示结果
+                self.show_results(
+                    predictions, 
+                    historical_predictions,  # 添加历史预测数据
+                    metrics, 
+                    start_date, 
+                    end_date, 
+                    train_start, 
+                    train_end, 
+                    train_duration
+                )
+                
+            except Exception as e:
+                self.update_status(f"错误：{str(e)}")
             
         except Exception as e:
-            self.update_status(f"错误：{str(e)}")
+            messagebox.showerror("错误", f"预测失败: {str(e)}")
         
     def show_results(self, predictions, historical_predictions, metrics, start_date, end_date, train_start, train_end, train_duration):
         """显示预测结果"""
@@ -684,6 +761,146 @@ class StockPredictionApp:
             # 调用现有的预测方法
             self.start_prediction()
             self.update_status(f"完成预测股票: {stock_code}")
+
+    def generate_comparison_chart(self):
+        """生成股票趋势对比图"""
+        try:
+            # 获取选中的股票
+            selected_indices = self.stock_listbox.curselection()
+            if not selected_indices:
+                messagebox.showwarning("警告", "请至少选择一支股票")
+                return
+            
+            # 获取对比图的年份范围
+            start_year = int(self.compare_start_year.get())
+            end_year = int(self.compare_end_year.get())
+            
+            if start_year >= end_year:
+                messagebox.showwarning("警告", "起始年份必须小于结束年份")
+                return
+            
+            # 设置日期范围
+            start_date = datetime(start_year, 1, 1)
+            end_date = datetime(end_year, 12, 31)
+            
+            # 清除之前的图表
+            plt.clf()
+            plt.close('all')  # 确保关闭所有图表
+            
+            # 创建新图表
+            fig, ax = plt.subplots(figsize=(16, 9), dpi=100)
+            
+            # 获取并绘制每支股票的数据
+            selected_stocks = []
+            for idx in selected_indices:
+                stock_info = self.stock_listbox.get(idx).split(" - ")
+                stock_code = stock_info[0]
+                stock_name = stock_info[1]
+                selected_stocks.append(stock_name)
+                
+                # 获取股票数据
+                df = get_stock_data(
+                    stock_code,
+                    start_date.strftime('%Y-%m-%d'),
+                    end_date.strftime('%Y-%m-%d')
+                )
+                
+                # 确保数据在指定的日期范围内
+                df = df[start_date:end_date]
+                
+                # 绘制股价走势
+                ax.plot(df.index, df['close'], label=f"{stock_name}({stock_code})")
+            
+            # 设置x轴范围
+            ax.set_xlim([start_date, end_date])
+            
+            # 设置图表标题和标签
+            plt.title(f"{start_year}年至{end_year}年新能源汽车股票波动趋势对比")
+            plt.xlabel("日期")
+            plt.ylabel("股价(元)")
+            plt.legend()
+            plt.grid(True)
+            
+            # 调整日期显示
+            fig.autofmt_xdate()
+            
+            # 保存图表
+            self.temp_chart_path = "temp_comparison_chart.png"
+            plt.savefig(self.temp_chart_path, dpi=300, bbox_inches='tight', pad_inches=0.5)
+            
+            # 更新文件名
+            stock_names = '-'.join(selected_stocks)
+            self.save_filename = f"{start_year}年至{end_year}年{stock_names}股价波动趋势对比图"
+            
+            # 显示图表
+            self.show_chart_in_window()
+            
+            # 启用保存按钮
+            self.save_button.configure(state=tk.NORMAL)
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"生成对比图失败: {str(e)}")
+            print(f"错误详情: {str(e)}")
+        
+    def show_chart_in_window(self):
+        """在新窗口中显示图表"""
+        chart_window = tk.Toplevel(self.root)
+        chart_window.title("股票趋势对比图")
+        
+        # 设置窗口大小为屏幕的80%
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        window_width = int(screen_width * 0.8)
+        window_height = int(screen_height * 0.8)
+        
+        # 加载图片并调整大小
+        img = Image.open(self.temp_chart_path)
+        # 计算调整后的尺寸，保持宽高比
+        img_width, img_height = img.size
+        ratio = min(window_width/img_width, window_height/img_height)
+        new_width = int(img_width * ratio)
+        new_height = int(img_height * ratio)
+        
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        
+        # 创建标签显示图片
+        label = tk.Label(chart_window, image=photo)
+        label.image = photo  # 保持引用
+        label.pack(padx=10, pady=10)
+        
+        # 设置窗口大小和位置
+        x = (screen_width - new_width) // 2
+        y = (screen_height - new_height) // 2
+        chart_window.geometry(f"{new_width + 20}x{new_height + 20}+{x}+{y}")
+        
+        # 添加关闭按钮
+        close_button = ttk.Button(
+            chart_window,
+            text="关闭",
+            command=chart_window.destroy,
+            style='Custom.TButton'
+        )
+        close_button.pack(pady=5)
+
+    def save_comparison_chart(self):
+        """保存对比图到record目录"""
+        try:
+            # 创建record/compare目录（如果不存在）
+            save_dir = os.path.join("record", "compare")
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 使用格式化的文件名
+            filename = f"{self.save_filename}.png"
+            save_path = os.path.join(save_dir, filename)
+            
+            # 复制临时文件到目标位置
+            shutil.copy2(self.temp_chart_path, save_path)
+            
+            messagebox.showinfo("成功", f"对比图已保存至: {save_path}")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"保存对比图失败: {str(e)}")
 
 if __name__ == "__main__":
     app = StockPredictionApp()
