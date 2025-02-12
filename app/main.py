@@ -13,7 +13,7 @@ from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 from datetime import datetime, timedelta
 import pandas as pd
-from data.data_preprocessing import get_stock_data
+from app.data.data_preprocessing import get_stock_data
 from models.model_trainer import ModelTrainer
 from utils.visualization import create_prediction_chart, create_metrics_table, create_historical_comparison_chart
 # from utils.record_keeper import RecordKeeper
@@ -22,6 +22,7 @@ from ttkthemes import ThemedTk  # 新增主题支持
 from config.model_versions import MODEL_VERSIONS  # 添加模型版本配置导入
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from app.utils.comparison_visualizer import ComparisonVisualizer
 
 # 添加以下字体设置
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
@@ -196,6 +197,15 @@ class StockPredictionApp:
             style='Custom.TButton'
         )
         all_predict_button.pack(side=tk.LEFT)
+        
+        # 在predict_button_frame中添加新按钮
+        self.compare_pred_actual_button = ttk.Button(
+            predict_button_frame,
+            text="预测值VS实际值",
+            command=self.show_comparison_window,
+            style='Custom.TButton'
+        )
+        self.compare_pred_actual_button.pack(side=tk.LEFT, padx=5)
         
         # === 趋势对比区域 ===
         compare_frame = ttk.LabelFrame(
@@ -901,6 +911,10 @@ class StockPredictionApp:
             
         except Exception as e:
             messagebox.showerror("错误", f"保存对比图失败: {str(e)}")
+
+    def show_comparison_window(self):
+        """显示预测值与实际值对比窗口"""
+        ComparisonVisualizer(self.root)
 
 if __name__ == "__main__":
     app = StockPredictionApp()
