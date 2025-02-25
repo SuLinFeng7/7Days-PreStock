@@ -53,3 +53,6 @@ TRANSFORMER_PARAMS = {
     'clip_grad_norm': 1.0,  # 梯度裁剪阈值
     'loss': 'huber'         # 损失函数类型
 }
+
+# Alpha Vantage API配置
+ALPHA_VANTAGE_API_KEY = 'GHB6EXF3IZCSFSMZ'
