@@ -16,7 +16,7 @@ import pandas as pd
 from app.data.data_preprocessing import get_stock_data
 from models.model_trainer import ModelTrainer
 from utils.visualization import create_prediction_chart, create_metrics_table, create_historical_comparison_chart
-# from utils.record_keeper import RecordKeeper
+from utils.record_keeper import RecordKeeper
 import numpy as np
 from ttkthemes import ThemedTk  # 新增主题支持
 from config.model_versions import MODEL_VERSIONS  # 添加模型版本配置导入
@@ -34,31 +34,6 @@ class StockPredictionApp:
         self.root.title("智能股票预测系统")
         self.root.geometry("1080x720")
         
-        # 创建并配置全局样式
-        self.style = ttk.Style()
-        self.style.configure(
-            'Custom.TButton',
-            padding=5,
-            font=('微软雅黑', 10)
-        )
-        
-        # 配置标签框架样式
-        self.style.configure(
-            'Custom.TLabelframe',
-            background='white',
-            relief='solid'
-        )
-        self.style.configure(
-            'Custom.TLabelframe.Label',
-            font=('微软雅黑', 10, 'bold'),
-            background='white'
-        )
-        
-        # 配置其他基础样式
-        self.style.configure('Custom.TFrame', background='#f0f0f0')
-        self.style.configure('Custom.TLabel', font=('微软雅黑', 10))
-        self.style.configure('Title.TLabel', font=('微软雅黑', 16, 'bold'))
-        
         # 初始化其他属性
         self.stock_names = {
             "600104.SH": "上汽集团",
@@ -70,7 +45,15 @@ class StockPredictionApp:
             "TSLA": "特斯拉",
             "LI": "理想汽车",
             "NIO": "蔚来汽车",
-            "XPEV": "小鹏汽车"
+            "XPEV": "小鹏汽车",
+            "RIVN": "Rivian汽车",
+            "LCID": "Lucid Motors",
+            "GM": "通用汽车",
+            "F": "福特汽车",
+            "VWAGY": "大众汽车",
+            "TM": "丰田汽车",
+            "HMC": "本田汽车",
+            "BYDDY": "比亚迪(美股)",
         }
         
         self.default_stocks = [f"{code} - {name}" for code, name in self.stock_names.items()]
@@ -719,16 +702,6 @@ class StockPredictionApp:
             future_canvas = FigureCanvasTkAgg(future_fig, master=future_tab)
             future_canvas.draw()
             future_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-            
-            # 记录预测记录
-            self.record_keeper.add_record(
-                stock_code=self.stock_id.get(),
-                predictions=predictions,
-                metrics=metrics,
-                train_start_date=train_start,
-                train_end_date=train_end,
-                train_duration=train_duration
-            )
             
         except Exception as e:
             self.update_status(f"保存预测结果时出错: {str(e)}")
