@@ -45,7 +45,15 @@ class StockPredictionApp:
             "TSLA": "特斯拉",
             "LI": "理想汽车",
             "NIO": "蔚来汽车",
-            "XPEV": "小鹏汽车"
+            "XPEV": "小鹏汽车",
+            "RIVN": "Rivian汽车",
+            "LCID": "Lucid Motors",
+            "GM": "通用汽车",
+            "F": "福特汽车",
+            "VWAGY": "大众汽车",
+            "TM": "丰田汽车",
+            "HMC": "本田汽车",
+            "BYDDY": "比亚迪(美股)",
         }
         
         self.default_stocks = [f"{code} - {name}" for code, name in self.stock_names.items()]
