@@ -13,71 +13,68 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from datetime import datetime, timedelta
-from config.config import TUSHARE_TOKEN, TRAIN_TEST_SPLIT, TRAIN_YEARS
+from config.config import TUSHARE_TOKEN, TRAIN_TEST_SPLIT, TRAIN_YEARS, ALPHA_VANTAGE_API_KEY
+from alpha_vantage.timeseries import TimeSeries
 
-def get_stock_data(stock_id, start_date, end_date):
-    """获取股票数据"""
+def get_stock_data(stock_code, start_date, end_date):
     try:
-        # 判断是否为A股
-        if '.SH' in stock_id or '.SZ' in stock_id:
-            # 使用tushare获取A股数据
-            pro = ts.pro_api(TUSHARE_TOKEN)
+        if stock_code.endswith(('.SH', '.SZ')):  # A股
+            # 使用Tushare获取A股数据
+            ts.set_token(TUSHARE_TOKEN)
+            pro = ts.pro_api()
+            df = pro.daily(ts_code=stock_code, 
+                         start_date=start_date.replace('-', ''), 
+                         end_date=end_date.replace('-', ''))
+                         
+            # A股数据格式处理
+            df = df.rename(columns={
+                'trade_date': 'date',
+                'close': 'close',
+                'open': 'open',
+                'high': 'high',
+                'low': 'low',
+                'vol': 'volume'
+            })
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
             
-            # 先尝试获取股票的所有历史数据
-            # 使用一个较早的日期作为起始日期，确保能获取到所有数据
-            start_date_ts = '20100101'  # 使用2010年作为起始日期
-            end_date_ts = end_date.replace('-', '')
+        else:  # 美股使用Alpha Vantage
+            # 从配置文件获取 API key
+            ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
             
-            df = pro.daily(ts_code=stock_id, 
-                          start_date=start_date_ts, 
-                          end_date=end_date_ts)
+            pure_code = stock_code.split('.')[0] if '.' in stock_code else stock_code
+            df, _ = ts.get_daily(symbol=pure_code, outputsize='full')
             
-            if df.empty:
-                raise ValueError(f"No data found for stock {stock_id}")
+            # 调整列名
+            df = df.rename(columns={
+                '4. close': 'close',
+                '1. open': 'open',
+                '2. high': 'high',
+                '3. low': 'low',
+                '5. volume': 'volume'
+            })
             
-            df['trade_date'] = pd.to_datetime(df['trade_date'])
-            df.set_index('trade_date', inplace=True)
-            df.sort_index(inplace=True)
+            # 确保日期是datetime格式
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
             
-            stock_data = df[['close']]
-            
-        else:
-            # 使用yfinance获取其他市场数据
-            # 先尝试获取所有历史数据
-            stock = yf.download(stock_id, end=end_date, progress=False)
-            
-            if stock.empty:
-                raise ValueError(f"No data found for ticker {stock_id}")
-            
-            if 'Adj Close' in stock.columns:
-                stock_data = stock[['Adj Close']].rename(columns={"Adj Close": "close"})
-            else:
-                stock_data = stock[['Close']].rename(columns={"Close": "close"})
+            # 过滤日期范围
+            df = df.loc[(df.index >= start_dt) & (df.index <= end_dt)]
         
-        # 获取第一条数据的日期
-        first_date = stock_data.index[0]
-        target_start_date = datetime.now() - timedelta(days=365*TRAIN_YEARS)
-        
-        # 打印第一条数据的日期
-        print(f"\n股票 {stock_id} 的第一条数据日期为: {first_date.strftime('%Y-%m-%d')}")
-        print(f"目标起始日期为: {target_start_date.strftime('%Y-%m-%d')}")
-        
-        # 如果第一条数据的日期晚于目标起始日期，使用所有可用数据
-        # 否则，使用最近TRAIN_YEARS年的数据
-        if first_date > target_start_date:
-            print(f"股票上市时间不足{TRAIN_YEARS}年，将使用所有可用数据")
-            final_data = stock_data
-        else:
-            print(f"股票上市时间超过{TRAIN_YEARS}年，将使用最近{TRAIN_YEARS}年的数据")
-            final_data = stock_data[stock_data.index >= target_start_date]
-        
-        print(f"最终使用的数据范围: {final_data.index[0].strftime('%Y-%m-%d')} 到 {final_data.index[-1].strftime('%Y-%m-%d')}")
-        print(f"数据总量: {len(final_data)} 条")
-        
-        return final_data
+        if df.empty:
+            print(f"警告：未获取到股票 {stock_code} 的数据")
+            return pd.DataFrame()
+            
+        # 统一后处理
+        df.sort_index(inplace=True)
+        print(f"成功获取到股票 {stock_code} 的数据，时间范围：{df.index.min()} 到 {df.index.max()}")
+        return df
         
     except Exception as e:
-        raise Exception(f"Error fetching data for {stock_id}: {str(e)}")
+        print(f"获取股票数据失败: {str(e)}")
+        import traceback
+        print(traceback.format_exc())  # 打印详细错误信息
+        return pd.DataFrame()
 
 def create_sequences(data, window_size, prediction_steps):
     """创建时间序列数据"""
