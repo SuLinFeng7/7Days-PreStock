@@ -6,8 +6,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.insert(0, parent_dir)
 
-import tushare as ts
-import yfinance as yf
+# 修改导入顺序和变量命名
+import tushare as ts_api  # 改名避免与 TimeSeries 实例冲突
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
@@ -20,8 +20,8 @@ def get_stock_data(stock_code, start_date, end_date):
     try:
         if stock_code.endswith(('.SH', '.SZ')):  # A股
             # 使用Tushare获取A股数据
-            ts.set_token(TUSHARE_TOKEN)
-            pro = ts.pro_api()
+            ts_api.set_token(TUSHARE_TOKEN)  # 使用重命名后的ts_api
+            pro = ts_api.pro_api()
             df = pro.daily(ts_code=stock_code, 
                          start_date=start_date.replace('-', ''), 
                          end_date=end_date.replace('-', ''))
@@ -40,10 +40,10 @@ def get_stock_data(stock_code, start_date, end_date):
             
         else:  # 美股使用Alpha Vantage
             # 从配置文件获取 API key
-            ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+            alpha_ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')  # 重命名为alpha_ts
             
             pure_code = stock_code.split('.')[0] if '.' in stock_code else stock_code
-            df, _ = ts.get_daily(symbol=pure_code, outputsize='full')
+            df, _ = alpha_ts.get_daily(symbol=pure_code, outputsize='full')
             
             # 调整列名
             df = df.rename(columns={
