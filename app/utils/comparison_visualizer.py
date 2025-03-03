@@ -6,6 +6,7 @@ from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 import os
 import sys
+import numpy as np
 
 # 添加项目根目录到Python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,19 +16,27 @@ sys.path.insert(0, project_root)
 # 修改导入语句
 from app.data.data_preprocessing import get_stock_data
 from config.config import TUSHARE_TOKEN
+from app.utils.utils import calculate_metrics  # 添加评估指标计算函数的导入
 
 class ComparisonVisualizer:
     def __init__(self, parent):
         self.window = tk.Toplevel(parent)
         self.window.title("预测值VS实际值对比")
-        self.window.geometry("800x600")
+        self.window.geometry("1200x800")  # 增加窗口大小以适应两个图表
         
         # 创建文件选择框架
         self.create_file_selector()
         
         # 创建图表显示区域
-        self.chart_frame = ttk.Frame(self.window)
-        self.chart_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.charts_container = ttk.Frame(self.window)
+        self.charts_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # 创建左右分栏
+        self.left_frame = ttk.Frame(self.charts_container)
+        self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        self.right_frame = ttk.Frame(self.charts_container)
+        self.right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
     def create_file_selector(self):
         """创建文件选择区域"""
@@ -101,7 +110,6 @@ class ComparisonVisualizer:
             
             # 从文件路径中提取股票代码
             try:
-                # 分割路径并查找包含股票代码的部分
                 path_parts = file_path.replace('\\', '/').split('/')
                 for part in path_parts:
                     if '_' in part and (('.SH' in part) or ('.SZ' in part) or 
@@ -115,8 +123,6 @@ class ComparisonVisualizer:
                        stock_code in ['TSLA', 'LI', 'NIO', 'XPEV']):
                     raise ValueError(f"无效的股票代码: {stock_code}")
                 
-                print(f"找到股票代码: {stock_code}")  # 调试信息
-                
             except Exception as e:
                 messagebox.showerror("错误", f"无法从文件路径中获取股票代码: {str(e)}")
                 return
@@ -129,15 +135,15 @@ class ComparisonVisualizer:
             )
             
             # 清除之前的图表
-            plt.clf()
             plt.close('all')
             
-            # 创建新图表
-            plt.figure(figsize=(12, 6))
+            # 创建预测值vs实际值对比图
+            fig1 = plt.figure(figsize=(8, 6))
+            ax1 = fig1.add_subplot(111)
             
             # 绘制实际值（如果有）
+            actual_values = None
             if not actual_df.empty:
-                # 处理不同数据源的列名差异
                 close_price = None
                 if 'close' in actual_df.columns:  # A股数据
                     close_price = actual_df['close']
@@ -145,48 +151,108 @@ class ComparisonVisualizer:
                     close_price = actual_df['Close']
                 
                 if close_price is not None:
-                    plt.plot(actual_df.index, close_price, label='实际值', marker='o')
-                else:
-                    print(f"警告: 未找到收盘价数据，可用列: {actual_df.columns.tolist()}")
+                    ax1.plot(actual_df.index, close_price, label='实际值', marker='o')
+                    actual_values = close_price.values
             
             # 绘制预测值
             dates = pd.to_datetime(df['日期'])
-            plt.plot(dates, df['LSTM预测值'], label='LSTM预测值', marker='s')
-            plt.plot(dates, df['CNN预测值'], label='CNN预测值', marker='^')
-            plt.plot(dates, df['Transformer预测值'], label='Transformer预测值', marker='*')
+            ax1.plot(dates, df['LSTM预测值'], label='LSTM预测值', marker='s')
+            ax1.plot(dates, df['CNN预测值'], label='CNN预测值', marker='^')
+            ax1.plot(dates, df['Transformer预测值'], label='Transformer预测值', marker='*')
             
-            plt.title(f"{stock_code}股票预测值VS实际值对比")
-            plt.xlabel("日期")
-            plt.ylabel("股价(元)")
-            plt.legend()
-            plt.grid(True)
-            plt.xticks(rotation=45)
+            ax1.set_title(f"{stock_code}股票预测值VS实际值对比")
+            ax1.set_xlabel("日期")
+            ax1.set_ylabel("股价(元)")
+            ax1.legend()
+            ax1.grid(True)
+            plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
             
-            # 保存当前的图表信息，供后续保存使用
+            # 计算评估指标
+            metrics = {}
+            if actual_values is not None:
+                for model in ['LSTM', 'CNN', 'Transformer']:
+                    pred_values = df[f'{model}预测值'].values
+                    mape, rmse, mae = calculate_metrics(actual_values, pred_values)
+                    metrics[model] = {
+                        'MAPE': mape,
+                        'RMSE': rmse,
+                        'MAE': mae
+                    }
+                
+                # 创建评估指标对比图
+                fig2 = plt.figure(figsize=(8, 6))
+                ax2 = fig2.add_subplot(111)
+                
+                # 准备数据
+                models = list(metrics.keys())
+                x = np.arange(len(models))
+                width = 0.25
+                
+                # 绘制柱状图
+                mape_bars = ax2.bar(x - width, [metrics[m]['MAPE'] for m in models], width, label='MAPE')
+                rmse_bars = ax2.bar(x, [metrics[m]['RMSE'] for m in models], width, label='RMSE')
+                mae_bars = ax2.bar(x + width, [metrics[m]['MAE'] for m in models], width, label='MAE')
+                
+                # 添加数值标签
+                def autolabel(rects):
+                    for rect in rects:
+                        height = rect.get_height()
+                        ax2.annotate(f'{height:.2f}',
+                                   xy=(rect.get_x() + rect.get_width() / 2, height),
+                                   xytext=(0, 3),  # 3 points vertical offset
+                                   textcoords="offset points",
+                                   ha='center', va='bottom')
+                
+                autolabel(mape_bars)
+                autolabel(rmse_bars)
+                autolabel(mae_bars)
+                
+                ax2.set_title("模型评估指标对比")
+                ax2.set_xticks(x)
+                ax2.set_xticklabels(models)
+                ax2.legend()
+                ax2.grid(True)
+                
+                # 调整布局
+                fig2.tight_layout()
+            
+            # 在左右分栏中显示图表
+            for widget in self.left_frame.winfo_children():
+                widget.destroy()
+            for widget in self.right_frame.winfo_children():
+                widget.destroy()
+            
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            
+            # 显示预测对比图
+            canvas1 = FigureCanvasTkAgg(fig1, master=self.left_frame)
+            canvas1.draw()
+            canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            
+            # 显示评估指标图
+            if actual_values is not None:
+                canvas2 = FigureCanvasTkAgg(fig2, master=self.right_frame)
+                canvas2.draw()
+                canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            
+            # 保存当前的图表信息
             self.current_plot_info = {
                 'stock_code': stock_code,
                 'start_date': start_date,
                 'end_date': end_date,
-                'stock_name': self.get_stock_name(stock_code)  # 新增获取股票名称
+                'stock_name': self.get_stock_name(stock_code),
+                'metrics': metrics if actual_values is not None else None,
+                'figures': [fig1, fig2] if actual_values is not None else [fig1]
             }
             
-            # 在图表框架中显示图表
-            for widget in self.chart_frame.winfo_children():
-                widget.destroy()
-            
-            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-            canvas = FigureCanvasTkAgg(plt.gcf(), master=self.chart_frame)
-            canvas.draw()
-            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-            
-            # 在成功生成图表后启用保存按钮
+            # 启用保存按钮
             self.save_btn.configure(state='normal')
             
         except Exception as e:
             messagebox.showerror("错误", f"生成对比图失败: {str(e)}")
             import traceback
             print(traceback.format_exc())
-            
+
     def get_stock_name(self, stock_code):
         """获取股票名称"""
         stock_names = {
@@ -210,22 +276,30 @@ class ComparisonVisualizer:
                 messagebox.showerror("错误", "请先生成对比图")
                 return
             
-            # 创建保存目录
-            save_dir = os.path.join("record", "real&actual")
-            os.makedirs(save_dir, exist_ok=True)
-            
             # 获取当前图表信息
             stock_name = self.current_plot_info['stock_name']
-            start_date = self.current_plot_info['start_date'].strftime('%Y-%m-%d')
-            end_date = self.current_plot_info['end_date'].strftime('%Y-%m-%d')
+            start_date = self.current_plot_info['start_date'].strftime('%Y%m%d')
+            end_date = self.current_plot_info['end_date'].strftime('%Y%m%d')
             
-            # 生成文件名
-            filename = f"{stock_name}{start_date}至{end_date}实际值与预测值对比图.png"
-            save_path = os.path.join(save_dir, filename)
+            # 创建以股票名称和日期命名的目录
+            folder_name = f"{stock_name}-{start_date}至{end_date}"
+            save_dir = os.path.join("record", "real&actual", folder_name)
+            os.makedirs(save_dir, exist_ok=True)
             
-            # 保存图表
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            messagebox.showinfo("成功", f"对比图已保存至: {save_path}")
+            # 保存预测对比图
+            comparison_filename = "预测值VS实际值对比图.png"
+            comparison_path = os.path.join(save_dir, comparison_filename)
+            self.current_plot_info['figures'][0].savefig(comparison_path, dpi=300, bbox_inches='tight')
+            
+            # 如果有评估指标图，也保存它
+            if len(self.current_plot_info['figures']) > 1:
+                metrics_filename = "模型评估指标对比图.png"
+                metrics_path = os.path.join(save_dir, metrics_filename)
+                self.current_plot_info['figures'][1].savefig(metrics_path, dpi=300, bbox_inches='tight')
+                
+                messagebox.showinfo("成功", f"图表已保存至目录:\n{save_dir}")
+            else:
+                messagebox.showinfo("成功", f"对比图已保存至目录:\n{save_dir}")
             
         except Exception as e:
             messagebox.showerror("错误", f"保存对比图失败: {str(e)}")
