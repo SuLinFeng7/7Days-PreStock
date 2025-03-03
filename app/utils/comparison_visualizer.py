@@ -276,29 +276,30 @@ class ComparisonVisualizer:
                 messagebox.showerror("错误", "请先生成对比图")
                 return
             
-            # 创建保存目录
-            save_dir = os.path.join("record", "real&actual")
-            os.makedirs(save_dir, exist_ok=True)
-            
             # 获取当前图表信息
             stock_name = self.current_plot_info['stock_name']
-            start_date = self.current_plot_info['start_date'].strftime('%Y-%m-%d')
-            end_date = self.current_plot_info['end_date'].strftime('%Y-%m-%d')
+            start_date = self.current_plot_info['start_date'].strftime('%Y%m%d')
+            end_date = self.current_plot_info['end_date'].strftime('%Y%m%d')
+            
+            # 创建以股票名称和日期命名的目录
+            folder_name = f"{stock_name}-{start_date}至{end_date}"
+            save_dir = os.path.join("record", "real&actual", folder_name)
+            os.makedirs(save_dir, exist_ok=True)
             
             # 保存预测对比图
-            comparison_filename = f"{stock_name}{start_date}至{end_date}实际值与预测值对比图.png"
+            comparison_filename = "预测值VS实际值对比图.png"
             comparison_path = os.path.join(save_dir, comparison_filename)
             self.current_plot_info['figures'][0].savefig(comparison_path, dpi=300, bbox_inches='tight')
             
             # 如果有评估指标图，也保存它
             if len(self.current_plot_info['figures']) > 1:
-                metrics_filename = f"{stock_name}{start_date}至{end_date}模型评估指标对比图.png"
+                metrics_filename = "模型评估指标对比图.png"
                 metrics_path = os.path.join(save_dir, metrics_filename)
                 self.current_plot_info['figures'][1].savefig(metrics_path, dpi=300, bbox_inches='tight')
                 
-                messagebox.showinfo("成功", f"对比图和评估指标图已保存至:\n{comparison_path}\n{metrics_path}")
+                messagebox.showinfo("成功", f"图表已保存至目录:\n{save_dir}")
             else:
-                messagebox.showinfo("成功", f"对比图已保存至:\n{comparison_path}")
+                messagebox.showinfo("成功", f"对比图已保存至目录:\n{save_dir}")
             
         except Exception as e:
             messagebox.showerror("错误", f"保存对比图失败: {str(e)}")
