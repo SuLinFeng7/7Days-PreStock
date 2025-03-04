@@ -7,6 +7,7 @@ from PIL import Image, ImageTk
 import os
 import sys
 import numpy as np
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # 添加项目根目录到Python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,21 +23,22 @@ class ComparisonVisualizer:
     def __init__(self, parent):
         self.window = tk.Toplevel(parent)
         self.window.title("预测值VS实际值对比")
-        self.window.geometry("1200x800")  # 增加窗口大小以适应两个图表
+        self.window.geometry("1200x800")
         
         # 创建文件选择框架
         self.create_file_selector()
         
-        # 创建图表显示区域
-        self.charts_container = ttk.Frame(self.window)
-        self.charts_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # 创建选项卡控件
+        self.notebook = ttk.Notebook(self.window)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # 创建左右分栏
-        self.left_frame = ttk.Frame(self.charts_container)
-        self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # 创建两个选项卡页面
+        self.prediction_tab = ttk.Frame(self.notebook)
+        self.metrics_tab = ttk.Frame(self.notebook)
         
-        self.right_frame = ttk.Frame(self.charts_container)
-        self.right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # 添加选项卡
+        self.notebook.add(self.prediction_tab, text="预测值VS实际值")
+        self.notebook.add(self.metrics_tab, text="模型评估指标")
         
     def create_file_selector(self):
         """创建文件选择区域"""
@@ -138,7 +140,7 @@ class ComparisonVisualizer:
             plt.close('all')
             
             # 创建预测值vs实际值对比图
-            fig1 = plt.figure(figsize=(8, 6))
+            fig1 = plt.figure(figsize=(12, 6))
             ax1 = fig1.add_subplot(111)
             
             # 绘制实际值（如果有）
@@ -180,58 +182,84 @@ class ComparisonVisualizer:
                     }
                 
                 # 创建评估指标对比图
-                fig2 = plt.figure(figsize=(8, 6))
+                fig2 = plt.figure(figsize=(12, 6))
                 ax2 = fig2.add_subplot(111)
                 
                 # 准备数据
                 models = list(metrics.keys())
                 x = np.arange(len(models))
-                width = 0.25
+                width = 0.25  # 保持柱状图宽度不变
                 
                 # 绘制柱状图
                 mape_bars = ax2.bar(x - width, [metrics[m]['MAPE'] for m in models], width, label='MAPE')
                 rmse_bars = ax2.bar(x, [metrics[m]['RMSE'] for m in models], width, label='RMSE')
                 mae_bars = ax2.bar(x + width, [metrics[m]['MAE'] for m in models], width, label='MAE')
                 
-                # 添加数值标签
+                # 添加数值标签，增加字体大小和间距
                 def autolabel(rects):
                     for rect in rects:
                         height = rect.get_height()
                         ax2.annotate(f'{height:.2f}',
                                    xy=(rect.get_x() + rect.get_width() / 2, height),
-                                   xytext=(0, 3),  # 3 points vertical offset
+                                   xytext=(0, 5),  # 垂直偏移从 3 改为 5
                                    textcoords="offset points",
-                                   ha='center', va='bottom')
+                                   ha='center', 
+                                   va='bottom',
+                                   fontsize=10)  # 添加字体大小设置
                 
                 autolabel(mape_bars)
                 autolabel(rmse_bars)
                 autolabel(mae_bars)
                 
-                ax2.set_title("模型评估指标对比")
+                # 增加图表元素的字体大小
+                ax2.set_title("模型评估指标对比", fontsize=12)
                 ax2.set_xticks(x)
-                ax2.set_xticklabels(models)
-                ax2.legend()
+                ax2.set_xticklabels(models, fontsize=10)
+                ax2.legend(fontsize=10)
                 ax2.grid(True)
                 
-                # 调整布局
-                fig2.tight_layout()
+                # 增加左右边距
+                fig2.tight_layout(pad=2.0)  # 增加边距，默认是 1.08
             
-            # 在左右分栏中显示图表
-            for widget in self.left_frame.winfo_children():
-                widget.destroy()
-            for widget in self.right_frame.winfo_children():
+            # 在第一个选项卡中显示预测对比图
+            for widget in self.prediction_tab.winfo_children():
                 widget.destroy()
             
-            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-            
-            # 显示预测对比图
-            canvas1 = FigureCanvasTkAgg(fig1, master=self.left_frame)
+            canvas1 = FigureCanvasTkAgg(fig1, master=self.prediction_tab)
             canvas1.draw()
             canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True)
             
-            # 显示评估指标图
+            # 如果有实际值，创建并显示评估指标图
             if actual_values is not None:
-                canvas2 = FigureCanvasTkAgg(fig2, master=self.right_frame)
+                fig2 = plt.figure(figsize=(12, 6))
+                ax2 = fig2.add_subplot(111)
+                
+                # 绘制柱状图
+                mape_bars = ax2.bar(x - width, [metrics[m]['MAPE'] for m in models], width, label='MAPE')
+                rmse_bars = ax2.bar(x, [metrics[m]['RMSE'] for m in models], width, label='RMSE')
+                mae_bars = ax2.bar(x + width, [metrics[m]['MAE'] for m in models], width, label='MAE')
+                
+                # 添加数值标签，增加字体大小和间距
+                def autolabel(rects):
+                    for rect in rects:
+                        height = rect.get_height()
+                        ax2.annotate(f'{height:.2f}',
+                                   xy=(rect.get_x() + rect.get_width() / 2, height),
+                                   xytext=(0, 5),  # 垂直偏移从 3 改为 5
+                                   textcoords="offset points",
+                                   ha='center', 
+                                   va='bottom',
+                                   fontsize=10)  # 添加字体大小设置
+                
+                autolabel(mape_bars)
+                autolabel(rmse_bars)
+                autolabel(mae_bars)
+                
+                # 在第二个选项卡中显示评估指标图
+                for widget in self.metrics_tab.winfo_children():
+                    widget.destroy()
+                
+                canvas2 = FigureCanvasTkAgg(fig2, master=self.metrics_tab)
                 canvas2.draw()
                 canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True)
             
@@ -252,7 +280,7 @@ class ComparisonVisualizer:
             messagebox.showerror("错误", f"生成对比图失败: {str(e)}")
             import traceback
             print(traceback.format_exc())
-
+            
     def get_stock_name(self, stock_code):
         """获取股票名称"""
         stock_names = {
