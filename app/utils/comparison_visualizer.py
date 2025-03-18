@@ -162,6 +162,11 @@ class ComparisonVisualizer:
             ax1.plot(dates, df['CNN预测值'], label='CNN预测值', marker='^')
             ax1.plot(dates, df['Transformer预测值'], label='Transformer预测值', marker='*')
             
+            # 添加加权预测值的绘制（如果存在）
+            if '加权集成预测值' in df.columns:
+                ax1.plot(dates, df['加权集成预测值'], label='加权集成预测值', 
+                        marker='o', linewidth=3, color='red')
+            
             ax1.set_title(f"{stock_code}股票预测值VS实际值对比")
             ax1.set_xlabel("日期")
             ax1.set_ylabel("股价(元)")
@@ -176,6 +181,16 @@ class ComparisonVisualizer:
                     pred_values = df[f'{model}预测值'].values
                     mape, rmse, mae = calculate_metrics(actual_values, pred_values)
                     metrics[model] = {
+                        'MAPE': mape,
+                        'RMSE': rmse,
+                        'MAE': mae
+                    }
+                
+                # 添加加权模型的评估指标计算
+                if '加权集成预测值' in df.columns:
+                    pred_values = df['加权集成预测值'].values
+                    mape, rmse, mae = calculate_metrics(actual_values, pred_values)
+                    metrics['加权集成'] = {
                         'MAPE': mape,
                         'RMSE': rmse,
                         'MAE': mae
