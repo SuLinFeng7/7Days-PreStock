@@ -414,10 +414,17 @@ class StockPredictionApp:
             hist_fig = plt.Figure(figsize=(12, 6))
             hist_ax = hist_fig.add_subplot(111)
             
+            # 绘制历史预测对比图
             for model_name, data in historical_predictions.items():
                 if '_historical' in model_name:
                     model_display_name = model_name.replace('_historical', '')
-                    hist_ax.plot(data['predicted'], label=f"{model_display_name}_预测", alpha=0.7)
+                    if model_display_name == 'Weighted':
+                        model_display_name = '加权集成'
+                        # 使用加粗线条和不同颜色突出显示加权结果
+                        hist_ax.plot(data['predicted'], label=f"{model_display_name}_预测", 
+                                   linewidth=3, color='red', alpha=0.9)
+                    else:
+                        hist_ax.plot(data['predicted'], label=f"{model_display_name}_预测", alpha=0.7)
             
             hist_ax.plot(next(iter(historical_predictions.values()))['actual'], 
                         label="实际值", linewidth=2, color='black')
@@ -440,9 +447,22 @@ class StockPredictionApp:
             # 修改未来预测数据的保存部分
             date_range = pd.date_range(start=start_date, periods=len(next(iter(predictions.values()))))
             
+            # 在绘制未来预测图之前添加调试代码
+            print("\n预测结果概览:")
+            for model_name, pred_values in predictions.items():
+                if pred_values is None:
+                    print(f"{model_name} 预测结果为 None")
+                else:
+                    print(f"{model_name} 预测结果长度: {len(pred_values)}, 类型: {type(pred_values)}")
+                    if len(pred_values) > 0:
+                        print(f"  - 第一个值: {pred_values[0]}")
+            
             # 绘制未来预测图
             for model_name, pred_values in predictions.items():
-                model_display_name = model_name.replace('_future', '')
+                model_display_name = model_name
+                if model_name == 'Weighted':
+                    model_display_name = '加权集成'  # 中文显示
+                
                 future_ax.plot(date_range, pred_values, 
                               label=f'{model_display_name}预测', 
                               marker='o')
@@ -469,7 +489,10 @@ class StockPredictionApp:
             
             # 添加每个模型的预测值到DataFrame
             for model_name, pred_values in predictions.items():
-                model_display_name = model_name.replace('_future', '')
+                model_display_name = model_name
+                if model_name == 'Weighted':
+                    model_display_name = '加权集成'
+                
                 prediction_data[f'{model_display_name}预测值'] = [round(x, 2) for x in pred_values]
             
             df_predictions = pd.DataFrame(prediction_data)
@@ -570,6 +593,8 @@ class StockPredictionApp:
             for model_name, data in historical_predictions.items():
                 if '_historical' in model_name:
                     model_display_name = model_name.replace('_historical', '')
+                    if model_display_name == 'Weighted':
+                        model_display_name = '加权集成'
                     historical_data[f'{model_display_name}_历史预测'] = data['predicted']
 
             # 添加实际值
@@ -634,7 +659,13 @@ class StockPredictionApp:
             for model_name, data in historical_predictions.items():
                 if '_historical' in model_name:
                     model_display_name = model_name.replace('_historical', '')
-                    ax.plot(data['predicted'], label=f"{model_display_name}_预测", alpha=0.7)
+                    if model_display_name == 'Weighted':
+                        model_display_name = '加权集成'
+                        # 使用加粗线条和不同颜色突出显示加权结果
+                        ax.plot(data['predicted'], label=f"{model_display_name}_预测", 
+                               linewidth=3, color='red', alpha=0.9)
+                    else:
+                        ax.plot(data['predicted'], label=f"{model_display_name}_预测", alpha=0.7)
             
             # 绘制实际值
             ax.plot(next(iter(historical_predictions.values()))['actual'], 
@@ -690,7 +721,11 @@ class StockPredictionApp:
             
             # 绘制每个模型的未来预测
             for model_name, pred_values in predictions.items():
-                future_ax.plot(pred_values, label=model_name, marker='o')
+                model_display_name = model_name
+                if model_name == 'Weighted':
+                    model_display_name = '加权集成'  # 中文显示
+                
+                future_ax.plot(pred_values, label=model_display_name, marker='o')
             
             future_ax.set_title("未来预测趋势", fontproperties='SimHei', fontsize=12)
             future_ax.set_xlabel("预测天数", fontproperties='SimHei')

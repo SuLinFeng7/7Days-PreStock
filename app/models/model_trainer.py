@@ -244,6 +244,26 @@ class ModelTrainer:
                 retry_count = metrics.get(f"{model_name}_future", {}).get('retry_count', 0)
                 print(f"{model_name}: 训练时长 {duration:.2f} 分钟, 重试次数 {retry_count}")
             
+            # 添加加权预测结果
+            if len(predictions) >= 3:  # 确保三个模型都有预测结果
+                # 基于评估指标的动态加权
+                weighted_predictions = self.calculate_weighted_predictions(
+                    predictions, 
+                    metrics, 
+                    historical_predictions
+                )
+                
+                # 将加权结果添加到预测字典中
+                predictions['Weighted'] = weighted_predictions
+                
+                # 添加加权模型的历史预测
+                if len(historical_predictions) >= 3:
+                    weighted_historical = self.calculate_weighted_historical(
+                        historical_predictions,
+                        metrics
+                    )
+                    historical_predictions['Weighted_historical'] = weighted_historical
+            
             return predictions, historical_predictions, metrics
             
         except Exception as e:
@@ -251,3 +271,99 @@ class ModelTrainer:
             import traceback
             print(traceback.format_exc())
             raise e
+
+    def calculate_weighted_predictions(self, predictions, metrics, historical_predictions):
+        """计算加权预测结果"""
+        # 提取各模型的评估指标
+        model_weights = {}
+        total_weight = 0
+        
+        # 基于MAPE的反比例加权（MAPE越低权重越高）
+        for model_name in ['LSTM', 'CNN', 'Transformer']:
+            if f"{model_name}_historical" in metrics:
+                mape = metrics[f"{model_name}_historical"]['MAPE']
+                # 避免除以零，并且MAPE越小权重越大
+                weight = 1.0 / (mape + 0.1)
+                model_weights[model_name] = weight
+                total_weight += weight
+        
+        # 归一化权重
+        for model_name in model_weights:
+            model_weights[model_name] /= total_weight
+        
+        print("\n模型权重分配:")
+        for model_name, weight in model_weights.items():
+            print(f"{model_name}: {weight:.4f} ({weight*100:.2f}%)")
+        
+        # 修复键名匹配问题：创建模型名称映射
+        model_mapping = {
+            'LSTM': 'LSTM_future',
+            'CNN': 'CNN_future',
+            'Transformer': 'Transformer_future'
+        }
+        
+        # 获取预测结果的长度
+        first_key = list(predictions.keys())[0]
+        pred_length = len(predictions[first_key])
+        weighted_result = np.zeros(pred_length)
+        
+        # 使用映射后的键进行计算
+        available_models = 0
+        for model_name, weight in model_weights.items():
+            mapped_name = model_mapping.get(model_name)
+            if mapped_name in predictions:
+                available_models += 1
+                weighted_result += np.array(predictions[mapped_name]) * weight
+        
+        if available_models == 0:
+            print("警告: 没有可用的模型预测结果进行加权")
+            # 返回加权平均（简单平均）作为备选
+            for model_name in predictions:
+                weighted_result += np.array(predictions[model_name]) / len(predictions)
+        else:
+            print(f"成功使用 {available_models} 个模型进行加权")
+        
+        # 转换回列表形式，与其他预测结果保持一致
+        weighted_result = weighted_result.tolist()
+        
+        print(f"加权结果计算完成，结果长度: {len(weighted_result)}")
+        if len(weighted_result) > 0:
+            print(f"第一个加权预测值: {weighted_result[0]:.5f}")
+        
+        return weighted_result
+
+    def calculate_weighted_historical(self, historical_predictions, metrics):
+        """计算历史数据的加权预测结果"""
+        # 提取各模型的评估指标
+        model_weights = {}
+        total_weight = 0
+        
+        # 基于MAPE的反比例加权
+        for model_name in ['LSTM', 'CNN', 'Transformer']:
+            if f"{model_name}_historical" in metrics:
+                mape = metrics[f"{model_name}_historical"]['MAPE']
+                weight = 1.0 / (mape + 0.1)
+                model_weights[model_name] = weight
+                total_weight += weight
+        
+        # 归一化权重
+        for model_name in model_weights:
+            model_weights[model_name] /= total_weight
+        
+        # 计算加权历史预测结果
+        weighted_predicted = None
+        actual_values = None
+        
+        for model_name, weight in model_weights.items():
+            model_key = f"{model_name}_historical"
+            if model_key in historical_predictions:
+                if weighted_predicted is None:
+                    weighted_predicted = historical_predictions[model_key]['predicted'] * weight
+                    actual_values = historical_predictions[model_key]['actual']  # 所有模型的actual应该相同
+                else:
+                    weighted_predicted += historical_predictions[model_key]['predicted'] * weight
+        
+        return {
+            'predicted': weighted_predicted,
+            'actual': actual_values
+        }
